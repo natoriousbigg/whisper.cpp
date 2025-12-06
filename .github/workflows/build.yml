@@ -302,7 +302,15 @@ jobs:
           }
 
           Write-Host "Extracting Vulkan runtime components..."
-          Expand-Archive -Path $runtimeZip -DestinationPath $extractRoot -Force
+          $sevenZip = "C:\\Program Files\\7-Zip\\7z.exe"
+
+          if (Test-Path $sevenZip) {
+            Write-Host "Using 7-Zip extractor at $sevenZip"
+            & $sevenZip x $runtimeZip "-o$extractRoot" -y | Write-Host
+          } else {
+            Write-Host "7-Zip not found, falling back to Expand-Archive"
+            Expand-Archive -Path $runtimeZip -DestinationPath $extractRoot -Force
+          }
 
           $candidateRoots = Get-ChildItem -Path $extractRoot -Directory -Recurse | Where-Object {
             Test-Path (Join-Path $_.FullName "Include\\vulkan\\vulkan.h") -and \
