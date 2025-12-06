@@ -230,12 +230,65 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
 
+      - name: Install Vulkan SDK (Windows)
+        uses: humbletim/install-vulkan-sdk@v1.1.1
+        with:
+          version: "1.4.328.1"
+          # Avoid deprecated Actions cache backends (see https://github.blog/changelog/2024-12-05-notice-of-upcoming-releases-and-breaking-changes-for-github-actions/#actions-cache-v1-v2-and-actions-toolkit-cache-package-closing-down)
+          cache: false
+          platform: windows
+
+      - name: Export Vulkan SDK env vars
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '1.4.328.1'
+          $defaultPath = "C:\\VulkanSDK\\$version"
+
+          if (Test-Path $defaultPath) {
+            $sdkRoot = $defaultPath
+          }
+          else {
+            $installed = Get-ChildItem -Path 'C:\\VulkanSDK' -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+            if (-not $installed) {
+              throw "No Vulkan SDK installation found under C:\\VulkanSDK"
+            }
+            $sdkRoot = $installed.FullName
+          }
+
+          Write-Host "Using Vulkan SDK at $sdkRoot"
+          "VULKAN_SDK=$sdkRoot" >> $Env:GITHUB_ENV
+          Join-Path $sdkRoot 'Bin' >> $Env:GITHUB_PATH
+
+      - name: Verify Vulkan SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if (-not $Env:VULKAN_SDK) {
+            throw "VULKAN_SDK environment variable was not set by installer"
+          }
+
+          Write-Host "VULKAN_SDK=$Env:VULKAN_SDK"
+
+          if (-not (Test-Path (Join-Path $Env:VULKAN_SDK 'Include\\vulkan\\vulkan.h'))) {
+            throw "vulkan.h was not found in Include\\vulkan"
+          }
+
+          $binPath = Join-Path $Env:VULKAN_SDK 'Bin'
+          if (-not (Test-Path $binPath)) {
+            throw "Bin directory missing under VULKAN_SDK"
+          }
+
+          $binPath >> $Env:GITHUB_PATH
+
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
           cmake -S . -B ./build -A ${{ matrix.arch }} `
             -DBUILD_SHARED_LIBS=OFF `
             -DGGML_STATIC=ON `
+            -DGGML_VULKAN=ON `
             -DWHISPER_SDL2=OFF `
             -DWHISPER_BUILD_TESTS=OFF `
             -DWHISPER_BUILD_EXAMPLES=ON `
