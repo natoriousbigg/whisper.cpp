@@ -233,12 +233,24 @@ jobs:
       - name: Install Vulkan SDK
         shell: pwsh
         run: |
-          choco install vulkan-sdk --yes --limit-output
-          $sdkRoot = Get-ChildItem "C:\\VulkanSDK" | Sort-Object Name -Descending | Select-Object -First 1
-          if ($sdkRoot) {
-            $env:VULKAN_SDK = $sdkRoot.FullName
-            "VULKAN_SDK=$($env:VULKAN_SDK)" >> $Env:GITHUB_ENV
+          $ErrorActionPreference = 'Stop'
+          $sdkInstaller = "VulkanSDK.exe"
+          $sdkDir = "C:\\VulkanSDK"
+
+          Write-Host "Downloading Vulkan SDK installer..."
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe" -OutFile $sdkInstaller
+
+          Write-Host "Running Vulkan SDK installer..."
+          Start-Process -FilePath ".\\$sdkInstaller" -ArgumentList '/S',"/D=$sdkDir" -Wait
+
+          $sdkRoot = Get-ChildItem $sdkDir | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdkRoot) {
+            throw "Vulkan SDK installation did not produce a versioned directory in $sdkDir"
           }
+
+          $env:VULKAN_SDK = $sdkRoot.FullName
+          "VULKAN_SDK=$($env:VULKAN_SDK)" >> $Env:GITHUB_ENV
+          "$($env:VULKAN_SDK)\\Bin" >> $Env:GITHUB_PATH
 
       - name: Configure
         run: |
