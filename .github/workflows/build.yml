@@ -237,6 +237,17 @@ jobs:
           components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools, shaderc
           cache: false
 
+      - name: Normalize Vulkan SDK path
+        shell: pwsh
+        run: |
+          $sdkRoot = "C:\\VulkanSDK\\1.4.328.1"
+          if (-not (Test-Path "$sdkRoot\Include") -or -not (Test-Path "$sdkRoot\Bin")) {
+            Write-Error "Expected Vulkan SDK not found at $sdkRoot"
+          }
+
+          echo "VULKAN_SDK=$sdkRoot" >> $env:GITHUB_ENV
+          echo "$sdkRoot\Bin" >> $env:GITHUB_PATH
+
       - name: Verify Vulkan SDK binary
         shell: bash
         run: |
