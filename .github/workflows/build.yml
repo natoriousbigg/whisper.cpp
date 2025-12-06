@@ -237,6 +237,28 @@ jobs:
           cache: true
           platform: windows
 
+      - name: Export Vulkan SDK env vars
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '1.4.328.1'
+          $defaultPath = "C:\\VulkanSDK\\$version"
+
+          if (Test-Path $defaultPath) {
+            $sdkRoot = $defaultPath
+          }
+          else {
+            $installed = Get-ChildItem -Path 'C:\\VulkanSDK' -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+            if (-not $installed) {
+              throw "No Vulkan SDK installation found under C:\\VulkanSDK"
+            }
+            $sdkRoot = $installed.FullName
+          }
+
+          Write-Host "Using Vulkan SDK at $sdkRoot"
+          "VULKAN_SDK=$sdkRoot" >> $Env:GITHUB_ENV
+          Join-Path $sdkRoot 'Bin' >> $Env:GITHUB_PATH
+
       - name: Verify Vulkan SDK
         shell: pwsh
         run: |
