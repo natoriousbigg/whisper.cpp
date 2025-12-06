@@ -240,20 +240,33 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $vulkanRoot = $Env:VULKAN_SDK
 
-          if (-not $Env:VULKAN_SDK) {
-            throw "VULKAN_SDK environment variable was not set by installer"
+          if (-not $vulkanRoot -or -not (Test-Path $vulkanRoot)) {
+            $sdkDir = 'C:\\VulkanSDK'
+            if (Test-Path $sdkDir) {
+              $latest = Get-ChildItem -Path $sdkDir -Directory | Sort-Object Name -Descending | Select-Object -First 1
+              if ($latest) {
+                $vulkanRoot = $latest.FullName
+                "VULKAN_SDK=$vulkanRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+              }
+            }
           }
 
-          Write-Host "VULKAN_SDK=$Env:VULKAN_SDK"
-
-          if (-not (Test-Path (Join-Path $Env:VULKAN_SDK 'Include\\vulkan\\vulkan.h'))) {
-            throw "vulkan.h was not found in Include\\vulkan"
+          if (-not $vulkanRoot) {
+            throw "VULKAN_SDK environment variable was not set and no SDK installation was found under C:\\VulkanSDK"
           }
 
-          $binPath = Join-Path $Env:VULKAN_SDK 'Bin'
+          Write-Host "VULKAN_SDK=$vulkanRoot"
+
+          $vulkanHeader = Join-Path $vulkanRoot 'Include\vulkan\vulkan.h'
+          if (-not (Test-Path $vulkanHeader)) {
+            throw "vulkan.h was not found in Include\\vulkan at $vulkanHeader"
+          }
+
+          $binPath = Join-Path $vulkanRoot 'Bin'
           if (-not (Test-Path $binPath)) {
-            throw "Bin directory missing under VULKAN_SDK"
+            throw "Bin directory missing under VULKAN_SDK at $binPath"
           }
 
           $binPath >> $Env:GITHUB_PATH
