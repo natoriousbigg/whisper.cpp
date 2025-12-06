@@ -234,16 +234,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $sdkInstaller = "VulkanSDK.exe"
+          $sdkArchive = "vulkan-sdk.zip"
           $sdkDir = "C:\\VulkanSDK"
 
-          Write-Host "Downloading Vulkan SDK installer..."
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe" -OutFile $sdkInstaller
+          Write-Host "Downloading Vulkan SDK archive..."
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.zip" -OutFile $sdkArchive
 
-          Write-Host "Running Vulkan SDK installer..."
-          Start-Process -FilePath ".\\$sdkInstaller" -ArgumentList '/S',"/D=$sdkDir" -Wait
+          Write-Host "Extracting Vulkan SDK..."
+          Expand-Archive -Path $sdkArchive -DestinationPath $sdkDir -Force
 
-          $sdkRoot = Get-ChildItem $sdkDir | Sort-Object Name -Descending | Select-Object -First 1
+          $sdkRoot = Get-ChildItem $sdkDir | Sort-Object Name -Descending | Where-Object { $_.PSIsContainer } | Select-Object -First 1
           if (-not $sdkRoot) {
             throw "Vulkan SDK installation did not produce a versioned directory in $sdkDir"
           }
