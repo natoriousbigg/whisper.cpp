@@ -240,30 +240,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $expectedRoot = 'C:\\VulkanSDK\\1.4.328.1'
           $vulkanRoot = $Env:VULKAN_SDK
 
-          # Fall back to common install roots used by humbletim/install-vulkan-sdk
-          if (-not $vulkanRoot -or -not (Test-Path $vulkanRoot)) {
-            $candidateRoots = @(
-              'C:\\VulkanSDK',
-              "$Env:LOCALAPPDATA\\VulkanSDK",
-              "$Env:LOCALAPPDATA\\LunarG\\VulkanSDK"
-            )
-
-            foreach ($root in $candidateRoots) {
-              if (-not (Test-Path $root)) { continue }
-
-              $latest = Get-ChildItem -Path $root -Directory | Sort-Object Name -Descending | Select-Object -First 1
-              if ($latest) {
-                $vulkanRoot = $latest.FullName
-                "VULKAN_SDK=$vulkanRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-                break
-              }
-            }
+          if (Test-Path $expectedRoot) {
+            $vulkanRoot = $expectedRoot
+            "VULKAN_SDK=$vulkanRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           }
 
           if (-not $vulkanRoot -or -not (Test-Path $vulkanRoot)) {
-            throw "VULKAN_SDK environment variable was not set and no SDK installation was found in known locations"
+            throw "Vulkan SDK was not found at $expectedRoot and VULKAN_SDK is unset or invalid"
           }
 
           Write-Host "VULKAN_SDK=$vulkanRoot"
