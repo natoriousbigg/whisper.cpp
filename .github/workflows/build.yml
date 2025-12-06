@@ -234,6 +234,65 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+          function Download-VulkanSdkArchive {
+            param(
+              [string] $Uri,
+              [string] $Destination,
+              [int] $MaxAttempts = 3
+            )
+
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+            for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+              Write-Host "Downloading Vulkan SDK archive (attempt $attempt of $MaxAttempts) from $Uri..."
+
+              try {
+                Invoke-WebRequest -Uri $Uri -OutFile $Destination -UseBasicParsing
+              } catch {
+                if ($attempt -eq $MaxAttempts) {
+                  throw
+                }
+
+                Write-Warning "Download failed: $($_.Exception.Message). Retrying..."
+                Start-Sleep -Seconds ([int][Math]::Min(30, 5 * $attempt))
+                continue
+              }
+
+              if (-not (Test-Path $Destination)) {
+                if ($attempt -eq $MaxAttempts) {
+                  throw "Vulkan SDK archive was not downloaded"
+                }
+
+                Write-Warning "Download output missing; retrying..."
+                continue
+              }
+
+              $fileInfo = Get-Item $Destination
+              if ($fileInfo.Length -lt 1024) {
+                if ($attempt -eq $MaxAttempts) {
+                  throw "Downloaded Vulkan SDK archive is too small: $($fileInfo.Length) bytes"
+                }
+
+                Write-Warning "Downloaded archive size ($($fileInfo.Length) bytes) is suspicious; retrying..."
+                continue
+              }
+
+              try {
+                $zip = [System.IO.Compression.ZipFile]::OpenRead($Destination)
+                $zip.Dispose()
+                return
+              } catch {
+                if ($attempt -eq $MaxAttempts) {
+                  throw "Downloaded Vulkan SDK archive is invalid: $($_.Exception.Message)"
+                }
+
+                Write-Warning "Archive validation failed: $($_.Exception.Message). Retrying..."
+              }
+            }
+          }
+
           $sdkArchive = "vulkan-sdk.zip"
           $sdkDir = "C:\\VulkanSDK"
           $downloadUrl = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.zip?Human=true"
@@ -245,15 +304,11 @@ jobs:
             Remove-Item -Force $sdkArchive
           }
 
-          Write-Host "Downloading Vulkan SDK archive from $downloadUrl..."
-          Invoke-WebRequest -Uri $downloadUrl -OutFile $sdkArchive -UseBasicParsing
-
-          if (-not (Test-Path $sdkArchive)) {
-            throw "Vulkan SDK archive was not downloaded"
-          }
+          Download-VulkanSdkArchive -Uri $downloadUrl -Destination $sdkArchive
 
           Write-Host "Extracting Vulkan SDK..."
           Add-Type -AssemblyName System.IO.Compression.FileSystem
+          New-Item -ItemType Directory -Path $sdkDir -Force | Out-Null
           [System.IO.Compression.ZipFile]::ExtractToDirectory($sdkArchive, $sdkDir)
 
           $sdkRoot = Get-ChildItem $sdkDir | Sort-Object Name -Descending | Where-Object { $_.PSIsContainer } | Select-Object -First 1
