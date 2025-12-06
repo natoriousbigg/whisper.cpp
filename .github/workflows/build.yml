@@ -230,7 +230,7 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Vulkan SDK
+      - name: Install Vulkan SDK runtime components
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -256,63 +256,73 @@ jobs:
           }
 
           $sdkVersion = "1.4.328.1"
-          $installer = "vulkansdk-windows-X64-$sdkVersion.exe"
-          $sdkRoot = "C:\\VulkanSDK\\$sdkVersion"
-          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$installer"
+          $runtimeZip = "VulkanRT-X64-$sdkVersion-Components.zip"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$runtimeZip"
+          $runtimeRoot = "C:\\VulkanRT\\$sdkVersion"
+          $extractRoot = Join-Path $env:RUNNER_TEMP "vulkanrt"
 
-          if (Test-Path $sdkRoot) {
-            Write-Host "Cleaning previous Vulkan SDK root at $sdkRoot"
-            Remove-Item -Recurse -Force $sdkRoot
+          if (Test-Path $runtimeRoot) {
+            Write-Host "Cleaning previous Vulkan runtime root at $runtimeRoot"
+            Remove-Item -Recurse -Force $runtimeRoot
           }
-          if (Test-Path $installer) {
-            Remove-Item -Force $installer
+          if (Test-Path $extractRoot) {
+            Remove-Item -Recurse -Force $extractRoot
           }
+          New-Item -ItemType Directory -Path $extractRoot | Out-Null
 
           Invoke-WithRetry -Operation {
-            Write-Host "Downloading Vulkan SDK installer from $downloadUrl"
+            Write-Host "Downloading Vulkan runtime components from $downloadUrl"
             $userAgent = "Mozilla/5.0 (Windows NT; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             & curl.exe -L --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 600 `
               -H "User-Agent: $userAgent" `
-              -o $installer `
+              -o $runtimeZip `
               "$downloadUrl"
 
             if ($LASTEXITCODE -ne 0) {
               throw "curl exited with code $LASTEXITCODE"
             }
 
-            if (-not (Test-Path $installer)) {
-              throw "Installer not downloaded"
+            if (-not (Test-Path $runtimeZip)) {
+              throw "Runtime archive not downloaded"
             }
 
-            $fileInfo = Get-Item $installer
+            $fileInfo = Get-Item $runtimeZip
             if ($fileInfo.Length -lt 5MB) {
-              throw "Installer size too small: $($fileInfo.Length) bytes"
+              throw "Runtime archive size too small: $($fileInfo.Length) bytes"
             }
           }
 
-          Write-Host "Running silent Vulkan SDK installer..."
-          $installArgs = @(
-            "--accept-licenses",
-            "--default-answer",
-            "--confirm-command",
-            "--root", $sdkRoot,
-            "--remove-previous-versions",
-            "--disable-instance-layers",
-            "--component", "VulkanSDK"
-          )
+          Write-Host "Extracting Vulkan runtime components..."
+          Expand-Archive -Path $runtimeZip -DestinationPath $extractRoot -Force
 
-          $process = Start-Process -FilePath (Resolve-Path $installer) -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
-          if ($process.ExitCode -ne 0) {
-            throw "Vulkan SDK installer exited with code $($process.ExitCode)"
+          $candidateRoots = Get-ChildItem -Path $extractRoot -Directory -Recurse | Where-Object {
+            Test-Path (Join-Path $_.FullName "Include\\vulkan\\vulkan.h") -and \
+            (Test-Path (Join-Path $_.FullName "Lib"))
           }
 
-          if (-not (Test-Path "$sdkRoot\Bin\glslc.exe")) {
-            throw "Vulkan SDK installation did not produce expected binaries under $sdkRoot"
+          if (-not $candidateRoots) {
+            throw "Could not locate Vulkan runtime Include/Lib directories after extraction"
           }
 
-          $env:VULKAN_SDK = $sdkRoot
+          $foundRoot = $candidateRoots | Select-Object -First 1
+          Write-Host "Using Vulkan runtime root at $($foundRoot.FullName)"
+          New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
+          Copy-Item -Path $foundRoot.FullName\* -Destination $runtimeRoot -Recurse -Force
+
+          if (-not (Test-Path (Join-Path $runtimeRoot "Include\\vulkan\\vulkan.h"))) {
+            throw "Vulkan runtime missing headers under $runtimeRoot"
+          }
+          if (-not (Test-Path (Join-Path $runtimeRoot "Lib"))) {
+            throw "Vulkan runtime missing Lib directory under $runtimeRoot"
+          }
+
+          $env:VULKAN_SDK = $runtimeRoot
           "VULKAN_SDK=$($env:VULKAN_SDK)" >> $Env:GITHUB_ENV
-          "$($env:VULKAN_SDK)\\Bin" >> $Env:GITHUB_PATH
+
+          $binPath = Join-Path $env:VULKAN_SDK "Bin"
+          if (Test-Path $binPath) {
+            $binPath >> $Env:GITHUB_PATH
+          }
 
       - name: Configure
         run: |
