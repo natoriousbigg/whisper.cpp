@@ -236,12 +236,25 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $sdkArchive = "vulkan-sdk.zip"
           $sdkDir = "C:\\VulkanSDK"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.zip?Human=true"
 
-          Write-Host "Downloading Vulkan SDK archive..."
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.zip" -OutFile $sdkArchive
+          if (Test-Path $sdkDir) {
+            Remove-Item -Recurse -Force $sdkDir
+          }
+          if (Test-Path $sdkArchive) {
+            Remove-Item -Force $sdkArchive
+          }
+
+          Write-Host "Downloading Vulkan SDK archive from $downloadUrl..."
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $sdkArchive -UseBasicParsing
+
+          if (-not (Test-Path $sdkArchive)) {
+            throw "Vulkan SDK archive was not downloaded"
+          }
 
           Write-Host "Extracting Vulkan SDK..."
-          Expand-Archive -Path $sdkArchive -DestinationPath $sdkDir -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($sdkArchive, $sdkDir)
 
           $sdkRoot = Get-ChildItem $sdkDir | Sort-Object Name -Descending | Where-Object { $_.PSIsContainer } | Select-Object -First 1
           if (-not $sdkRoot) {
