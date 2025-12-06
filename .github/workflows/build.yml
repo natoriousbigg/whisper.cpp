@@ -256,9 +256,9 @@ jobs:
           }
 
           $sdkVersion = "1.4.328.1"
-          $installer = "VulkanSDK-$sdkVersion-Installer.exe"
+          $installer = "vulkansdk-windows-X64-$sdkVersion.exe"
           $sdkRoot = "C:\\VulkanSDK\\$sdkVersion"
-          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$installer?Human=true"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$installer"
 
           if (Test-Path $sdkRoot) {
             Write-Host "Cleaning previous Vulkan SDK root at $sdkRoot"
