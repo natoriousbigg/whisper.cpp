@@ -122,7 +122,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             arch: x64
-            extra_cmake: ""
+            deb_arch: amd64
+            triplet: x86_64-linux-gnu
+            compiler_packages: ""
+            extra_cmake: "-DWHISPER_SDL2=ON"
+          - os: ubuntu-22.04
+            arch: x86
+            deb_arch: i386
+            triplet: i386-linux-gnu
+            compiler_packages: "gcc-i686-linux-gnu g++-i686-linux-gnu"
+            extra_cmake: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF -DWHISPER_BUILD_EXAMPLES=OFF"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -131,16 +140,21 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo dpkg --add-architecture ${{ matrix.deb_arch }}
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
-          sudo apt-get install -y build-essential libsdl2-dev cmake libvulkan-dev vulkan-sdk
+          sudo apt-get install -y build-essential cmake pkg-config \
+            ${{ matrix.compiler_packages }} \
+            libsdl2-dev:${{ matrix.deb_arch }} \
+            libvulkan-dev:${{ matrix.deb_arch }} \
+            vulkan-sdk
 
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${{ matrix.triplet }}/pkgconfig:/usr/share/pkgconfig"
           cmake -S . -B build \
-            -DWHISPER_SDL2=ON \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -158,15 +172,15 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-x64.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-vulkan.zip" whisper-cli
           popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-ubuntu
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-x64.zip
+          name: whisper-cli-ubuntu-${{ matrix.arch }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-vulkan.zip
 
   macos-build:
     needs: determine-tag
@@ -205,7 +219,7 @@ jobs:
           mkdir -p dist
           cp build/bin/Release/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" whisper-cli
           popd
 
       - name: Upload whisper-cli package (macOS)
@@ -213,52 +227,83 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-macos
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal.zip
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
 
   windows-build:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
-        arch: [x64]
+        include:
+          - arch: x64
+            msystem: MINGW64
+            pkg_prefix: mingw-w64-x86_64
+
+    runs-on: windows-latest
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: >-
+            base-devel
+            git
+            ${{ matrix.pkg_prefix }}-toolchain
+            ${{ matrix.pkg_prefix }}-cmake
+            ${{ matrix.pkg_prefix }}-ninja
+            ${{ matrix.pkg_prefix }}-python
+            ${{ matrix.pkg_prefix }}-pkg-config
+            ${{ matrix.pkg_prefix }}-openblas
+            ${{ matrix.pkg_prefix }}-vulkan-headers
+            ${{ matrix.pkg_prefix }}-vulkan-loader
+            ${{ matrix.pkg_prefix }}-vulkan-devel
+            ${{ matrix.pkg_prefix }}-glslang
+            ${{ matrix.pkg_prefix }}-shaderc
+            ${{ matrix.pkg_prefix }}-spirv-tools
+            zip
 
       - name: Configure
+        shell: msys2 {0}
         run: |
-          git config --global --add safe.directory /workspace
-          cmake -S . -B ./build -A ${{ matrix.arch }} `
-            -DBUILD_SHARED_LIBS=OFF `
-            -DGGML_STATIC=ON `
-            -DWHISPER_SDL2=OFF `
-            -DWHISPER_BUILD_TESTS=OFF `
-            -DWHISPER_BUILD_EXAMPLES=ON `
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DGGML_VULKAN=ON \
+            -DGGML_BLAS=ON \
+            -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DWHISPER_SDL2=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
             -DWHISPER_BUILD_SERVER=OFF
 
       - name: Build
+        shell: msys2 {0}
         run: |
-          cd ./build
-          msbuild ALL_BUILD.vcxproj -t:build -p:configuration=Release -p:platform=${{ matrix.arch }}
+          cmake --build build --config Release -- -j 4
 
-      - name: Package whisper-cli (Windows x64)
+      - name: Package whisper-cli (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
         run: |
-          mkdir dist
-          Copy-Item "build/bin/Release/whisper-cli.exe" dist/
-          Compress-Archive -Path "dist/whisper-cli.exe" -DestinationPath "dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-x64.zip"
+          mkdir -p dist
+          cp build/bin/whisper-cli.exe dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe
+          popd
 
-      - name: Upload whisper-cli package (Windows x64)
+      - name: Upload whisper-cli package (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-windows
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-x64.zip
+          name: whisper-cli-windows-${{ matrix.arch }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -269,8 +314,9 @@ jobs:
       - name: Download Ubuntu package
         uses: actions/download-artifact@v4
         with:
-          name: whisper-cli-ubuntu
+          pattern: whisper-cli-ubuntu-*
           path: release
+          merge-multiple: true
 
       - name: Download macOS package
         uses: actions/download-artifact@v4
@@ -281,16 +327,15 @@ jobs:
       - name: Download Windows package
         uses: actions/download-artifact@v4
         with:
-          name: whisper-cli-windows
+          pattern: whisper-cli-windows-*
           path: release
+          merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.determine-tag.outputs.tag_name }}
           files: |
-            release/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-x64.zip
-            release/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal.zip
-            release/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-x64.zip
+            release/*
           generate_release_notes: true
           prerelease: ${{ github.ref_type != 'tag' }}
