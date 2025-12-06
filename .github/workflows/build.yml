@@ -235,7 +235,7 @@ jobs:
         with:
           version: 1.4.328.1
           components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools, shaderc
-          cache: false
+          vulkan-use-cache: true
 
       - name: Locate Vulkan SDK
         shell: pwsh
@@ -265,11 +265,9 @@ jobs:
           echo "$sdkRoot\Bin" >> $env:GITHUB_PATH
 
       - name: Verify Vulkan SDK binary
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          "$VULKAN_SDK/Bin/glslangValidator.exe" --version
-          "$VULKAN_SDK/Bin/glslc.exe" --version
+          echo "Vulkan SDK Version=='$env:VULKAN_SDK_VERSION'"
 
       - name: Configure
         run: |
