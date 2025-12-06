@@ -271,7 +271,6 @@ jobs:
       - name: Configure
         shell: msys2 {0}
         run: |
-          git config --global --add safe.directory /workspace
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
