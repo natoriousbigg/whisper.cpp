@@ -230,12 +230,29 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
 
+      - name: Install Vulkan SDK (Windows)
+        uses: humbletim/setup-vulkan-sdk@v1
+        with:
+          version: 1.4.328.1
+          components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools, shaderc
+          vulkan-use-cache: true
+
+      - name: Verify Vulkan SDK binary
+        shell: pwsh
+        run: |
+          echo "Vulkan SDK Version=='$env:VULKAN_SDK_VERSION'"
+
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
           cmake -S . -B ./build -A ${{ matrix.arch }} `
             -DBUILD_SHARED_LIBS=OFF `
             -DGGML_STATIC=ON `
+            -DGGML_VULKAN=ON `
+            -DVulkan_INCLUDE_DIR="$env:VULKAN_SDK\Include" `
+            -DVulkan_LIBRARY="$env:VULKAN_SDK\Lib\vulkan-1.lib" `
+            -DVulkan_GLSLC_EXECUTABLE="$env:VULKAN_SDK\Bin\glslc.exe" `
+            -DGLSLC="$env:VULKAN_SDK\Bin\glslc.exe" `
             -DWHISPER_SDL2=OFF `
             -DWHISPER_BUILD_TESTS=OFF `
             -DWHISPER_BUILD_EXAMPLES=ON `
