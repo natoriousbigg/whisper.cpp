@@ -237,10 +237,13 @@ jobs:
           components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools, shaderc
           vulkan-use-cache: true
 
-      - name: Verify Vulkan SDK binary
-        shell: pwsh
+      - name: Verify Vulkan SDK tools
+        shell: bash
         run: |
-          echo "Vulkan SDK Version=='$env:VULKAN_SDK_VERSION'"
+          echo "Vulkan SDK Version=='${VULKAN_SDK_VERSION}'"
+          echo "VULKAN_SDK='${VULKAN_SDK}'"
+          "${VULKAN_SDK}/Bin/glslangValidator" --version
+          "${VULKAN_SDK}/Bin/glslc" --version
 
       - name: Configure
         run: |
@@ -249,10 +252,6 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF `
             -DGGML_STATIC=ON `
             -DGGML_VULKAN=ON `
-            -DVulkan_INCLUDE_DIR="$env:VULKAN_SDK\Include" `
-            -DVulkan_LIBRARY="$env:VULKAN_SDK\Lib\vulkan-1.lib" `
-            -DVulkan_GLSLC_EXECUTABLE="$env:VULKAN_SDK\Bin\glslc.exe" `
-            -DGLSLC="$env:VULKAN_SDK\Bin\glslc.exe" `
             -DWHISPER_SDL2=OFF `
             -DWHISPER_BUILD_TESTS=OFF `
             -DWHISPER_BUILD_EXAMPLES=ON `
