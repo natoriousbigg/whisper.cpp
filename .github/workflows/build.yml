@@ -237,15 +237,31 @@ jobs:
           components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools, shaderc
           cache: false
 
-      - name: Normalize Vulkan SDK path
+      - name: Locate Vulkan SDK
         shell: pwsh
         run: |
-          $sdkRoot = "C:\\VulkanSDK\\1.4.328.1"
-          if (-not (Test-Path "$sdkRoot\Include") -or -not (Test-Path "$sdkRoot\Bin")) {
-            Write-Error "Expected Vulkan SDK not found at $sdkRoot"
+          $candidates = @(
+            "$env:VULKAN_SDK",
+            "$env:VK_SDK_PATH",
+            "C:\\VulkanSDK\\1.4.328.1",
+            Join-Path $env:RUNNER_TEMP "vulkan_sdk",
+            Join-Path $env:GITHUB_WORKSPACE "vulkan_sdk"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          $sdkRoot = $null
+          foreach ($candidate in $candidates) {
+            if ((Test-Path "$candidate\Include") -and (Test-Path "$candidate\Bin")) {
+              $sdkRoot = $candidate
+              break
+            }
+          }
+
+          if (-not $sdkRoot) {
+            Write-Error "Vulkan SDK with Include and Bin folders not found in expected locations. Candidates: $($candidates -join ', ')"
           }
 
           echo "VULKAN_SDK=$sdkRoot" >> $env:GITHUB_ENV
+          echo "VK_SDK_PATH=$sdkRoot" >> $env:GITHUB_ENV
           echo "$sdkRoot\Bin" >> $env:GITHUB_PATH
 
       - name: Verify Vulkan SDK binary
