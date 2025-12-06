@@ -230,12 +230,23 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
 
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk --yes --limit-output
+          $sdkRoot = Get-ChildItem "C:\\VulkanSDK" | Sort-Object Name -Descending | Select-Object -First 1
+          if ($sdkRoot) {
+            $env:VULKAN_SDK = $sdkRoot.FullName
+            "VULKAN_SDK=$($env:VULKAN_SDK)" >> $Env:GITHUB_ENV
+          }
+
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
           cmake -S . -B ./build -A ${{ matrix.arch }} `
             -DBUILD_SHARED_LIBS=OFF `
             -DGGML_STATIC=ON `
+            -DGGML_VULKAN=ON `
             -DWHISPER_SDL2=OFF `
             -DWHISPER_BUILD_TESTS=OFF `
             -DWHISPER_BUILD_EXAMPLES=ON `
