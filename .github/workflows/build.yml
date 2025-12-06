@@ -260,10 +260,6 @@ jobs:
           $sdkRoot = "C:\\VulkanSDK\\1.4.328.1"
           $extractRoot = Join-Path $env:RUNNER_TEMP "vulkansdk"
 
-          if (Test-Path $sdkRoot) {
-            Write-Host "Cleaning previous Vulkan SDK root at $sdkRoot"
-            Remove-Item -Recurse -Force $sdkRoot
-          }
           if (Test-Path $extractRoot) {
             Remove-Item -Recurse -Force $extractRoot
           }
@@ -324,20 +320,18 @@ jobs:
 
           $foundRoot = $candidateRoots | Select-Object -First 1
           Write-Host "Using Vulkan SDK root at $($foundRoot.FullName)"
-          New-Item -ItemType Directory -Path $sdkRoot -Force | Out-Null
-          Copy-Item -Path $foundRoot.FullName\* -Destination $sdkRoot -Recurse -Force
 
-          if (-not (Test-Path (Join-Path $sdkRoot "Include\\vulkan\\vulkan.h"))) {
-            throw "Vulkan SDK missing headers under $sdkRoot"
+          if (-not (Test-Path (Join-Path $foundRoot.FullName "Include\\vulkan\\vulkan.h"))) {
+            throw "Vulkan SDK missing headers under $($foundRoot.FullName)"
           }
-          if (-not (Test-Path (Join-Path $sdkRoot "Lib"))) {
-            throw "Vulkan SDK missing Lib directory under $sdkRoot"
+          if (-not (Test-Path (Join-Path $foundRoot.FullName "Lib"))) {
+            throw "Vulkan SDK missing Lib directory under $($foundRoot.FullName)"
           }
-          if (-not (Test-Path (Join-Path $sdkRoot "Bin"))) {
-            throw "Vulkan SDK missing Bin directory under $sdkRoot"
+          if (-not (Test-Path (Join-Path $foundRoot.FullName "Bin"))) {
+            throw "Vulkan SDK missing Bin directory under $($foundRoot.FullName)"
           }
 
-          $env:VULKAN_SDK = $sdkRoot
+          $env:VULKAN_SDK = $foundRoot.FullName
           "VULKAN_SDK=$($env:VULKAN_SDK)" >> $Env:GITHUB_ENV
 
           $binPath = Join-Path $env:VULKAN_SDK "Bin"
