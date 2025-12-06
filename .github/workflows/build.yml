@@ -253,6 +253,7 @@ jobs:
             -DGGML_VULKAN=ON `
             -DVulkan_INCLUDE_DIR="$env:VULKAN_SDK\Include" `
             -DVulkan_LIBRARY="$env:VULKAN_SDK\Lib\vulkan-1.lib" `
+            -DVulkan_GLSLC_EXECUTABLE="$env:VULKAN_SDK\Bin\glslc.exe" `
             -DGLSLC="$env:VULKAN_SDK\Bin\glslc.exe" `
             -DWHISPER_SDL2=OFF `
             -DWHISPER_BUILD_TESTS=OFF `
