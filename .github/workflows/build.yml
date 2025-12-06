@@ -257,7 +257,7 @@ jobs:
 
           $sdkVersion = "1.4.328.1"
           $runtimeZip = "VulkanRT-X64-$sdkVersion-Components.zip"
-          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$runtimeZip"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$runtimeZip?Human=true"
           $runtimeRoot = "C:\\VulkanRT\\$sdkVersion"
           $extractRoot = Join-Path $env:RUNNER_TEMP "vulkanrt"
 
@@ -273,13 +273,12 @@ jobs:
           Invoke-WithRetry -Operation {
             Write-Host "Downloading Vulkan runtime components from $downloadUrl"
             $userAgent = "Mozilla/5.0 (Windows NT; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            & curl.exe -L --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 600 `
-              -H "User-Agent: $userAgent" `
-              -o $runtimeZip `
-              "$downloadUrl"
+            $requestParams = @{ Uri = $downloadUrl; OutFile = $runtimeZip; UseBasicParsing = $true; MaximumRetryCount = 5; RetryIntervalSec = 5; Headers = @{ "User-Agent" = $userAgent } }
 
-            if ($LASTEXITCODE -ne 0) {
-              throw "curl exited with code $LASTEXITCODE"
+            try {
+              Invoke-WebRequest @requestParams | Out-Null
+            } catch {
+              throw "Failed to download runtime archive: $($_.Exception.Message)"
             }
 
             if (-not (Test-Path $runtimeZip)) {
@@ -289,6 +288,17 @@ jobs:
             $fileInfo = Get-Item $runtimeZip
             if ($fileInfo.Length -lt 5MB) {
               throw "Runtime archive size too small: $($fileInfo.Length) bytes"
+            }
+
+            $fs = [IO.File]::OpenRead($runtimeZip)
+            try {
+              $signature = New-Object byte[] 2
+              $null = $fs.Read($signature, 0, 2)
+              if ($signature[0] -ne 0x50 -or $signature[1] -ne 0x4B) {
+                throw "Runtime archive does not appear to be a ZIP (missing PK header)"
+              }
+            } finally {
+              $fs.Dispose()
             }
           }
 
