@@ -241,7 +241,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$VULKAN_SDK/bin/glslangValidator" --version
+          "$VULKAN_SDK/Bin/glslangValidator.exe" --version
+          "$VULKAN_SDK/Bin/glslc.exe" --version
 
       - name: Configure
         run: |
@@ -250,6 +251,9 @@ jobs:
             -DBUILD_SHARED_LIBS=OFF `
             -DGGML_STATIC=ON `
             -DGGML_VULKAN=ON `
+            -DVulkan_INCLUDE_DIR="$env:VULKAN_SDK\Include" `
+            -DVulkan_LIBRARY="$env:VULKAN_SDK\Lib\vulkan-1.lib" `
+            -DGLSLC="$env:VULKAN_SDK\Bin\glslc.exe" `
             -DWHISPER_SDL2=OFF `
             -DWHISPER_BUILD_TESTS=OFF `
             -DWHISPER_BUILD_EXAMPLES=ON `
