@@ -236,110 +236,81 @@ jobs:
           $ErrorActionPreference = 'Stop'
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-          function Download-VulkanSdkArchive {
+          function Invoke-WithRetry {
             param(
-              [string] $Uri,
-              [string] $Destination,
-              [int] $MaxAttempts = 3
+              [scriptblock] $Operation,
+              [int] $MaxAttempts = 3,
+              [int] $DelaySeconds = 5
             )
 
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-
             for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-              Write-Host "Downloading Vulkan SDK archive (attempt $attempt of $MaxAttempts) from $Uri..."
-
-              if (Test-Path $Destination) {
-                Remove-Item -Force $Destination
-              }
-
               try {
-                $userAgent = "Mozilla/5.0 (Windows NT; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                & curl.exe -L --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 600 `
-                  -H "User-Agent: $userAgent" `
-                  -o $Destination `
-                  "$Uri"
-
-                if ($LASTEXITCODE -ne 0) {
-                  throw "curl exited with code $LASTEXITCODE"
-                }
-              } catch {
-                if ($attempt -eq $MaxAttempts) {
-                  throw
-                }
-
-                Write-Warning "Download failed: $($_.Exception.Message). Retrying..."
-                Start-Sleep -Seconds ([int][Math]::Min(30, 5 * $attempt))
-                continue
-              }
-
-              if (-not (Test-Path $Destination)) {
-                if ($attempt -eq $MaxAttempts) {
-                  throw "Vulkan SDK archive was not downloaded"
-                }
-
-                Write-Warning "Download output missing; retrying..."
-                continue
-              }
-
-              $fileInfo = Get-Item $Destination
-              if ($fileInfo.Length -lt 1024) {
-                if ($attempt -eq $MaxAttempts) {
-                  throw "Downloaded Vulkan SDK archive is too small: $($fileInfo.Length) bytes"
-                }
-
-                Write-Warning "Downloaded archive size ($($fileInfo.Length) bytes) is suspicious; retrying..."
-                continue
-              }
-
-              $headerBytes = Get-Content -Path $Destination -Encoding Byte -TotalCount 2
-              if (!($headerBytes.Length -eq 2 -and $headerBytes[0] -eq 0x50 -and $headerBytes[1] -eq 0x4b)) {
-                if ($attempt -eq $MaxAttempts) {
-                  throw "Downloaded file does not look like a zip archive"
-                }
-
-                Write-Warning "Downloaded file missing PK header; retrying..."
-                continue
-              }
-
-              try {
-                $zip = [System.IO.Compression.ZipFile]::OpenRead($Destination)
-                $zip.Dispose()
+                & $Operation
                 return
               } catch {
-                if ($attempt -eq $MaxAttempts) {
-                  throw "Downloaded Vulkan SDK archive is invalid: $($_.Exception.Message)"
-                }
-
-                Write-Warning "Archive validation failed: $($_.Exception.Message). Retrying..."
+                if ($attempt -eq $MaxAttempts) { throw }
+                Write-Warning "Attempt $attempt failed: $($_.Exception.Message). Retrying..."
+                Start-Sleep -Seconds ([int][Math]::Min(30, $DelaySeconds * $attempt))
               }
             }
           }
 
-          $sdkVersion = "1.3.296.0"
-          $sdkArchive = "vulkan-sdk.zip"
-          $sdkDir = "C:\\VulkanSDK"
-          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/VulkanSDK-$sdkVersion.zip?Human=true"
+          $sdkVersion = "1.4.328.1"
+          $installer = "VulkanSDK-$sdkVersion-Installer.exe"
+          $sdkRoot = "C:\\VulkanSDK\\$sdkVersion"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$sdkVersion/windows/$installer?Human=true"
 
-          if (Test-Path $sdkDir) {
-            Remove-Item -Recurse -Force $sdkDir
+          if (Test-Path $sdkRoot) {
+            Write-Host "Cleaning previous Vulkan SDK root at $sdkRoot"
+            Remove-Item -Recurse -Force $sdkRoot
           }
-          if (Test-Path $sdkArchive) {
-            Remove-Item -Force $sdkArchive
-          }
-
-          Download-VulkanSdkArchive -Uri $downloadUrl -Destination $sdkArchive
-
-          Write-Host "Extracting Vulkan SDK..."
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          New-Item -ItemType Directory -Path $sdkDir -Force | Out-Null
-          [System.IO.Compression.ZipFile]::ExtractToDirectory($sdkArchive, $sdkDir)
-
-          $sdkRoot = Get-ChildItem $sdkDir | Sort-Object Name -Descending | Where-Object { $_.PSIsContainer } | Select-Object -First 1
-          if (-not $sdkRoot) {
-            throw "Vulkan SDK installation did not produce a versioned directory in $sdkDir"
+          if (Test-Path $installer) {
+            Remove-Item -Force $installer
           }
 
-          $env:VULKAN_SDK = $sdkRoot.FullName
+          Invoke-WithRetry -Operation {
+            Write-Host "Downloading Vulkan SDK installer from $downloadUrl"
+            $userAgent = "Mozilla/5.0 (Windows NT; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            & curl.exe -L --retry 5 --retry-delay 5 --connect-timeout 30 --max-time 600 `
+              -H "User-Agent: $userAgent" `
+              -o $installer `
+              "$downloadUrl"
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "curl exited with code $LASTEXITCODE"
+            }
+
+            if (-not (Test-Path $installer)) {
+              throw "Installer not downloaded"
+            }
+
+            $fileInfo = Get-Item $installer
+            if ($fileInfo.Length -lt 5MB) {
+              throw "Installer size too small: $($fileInfo.Length) bytes"
+            }
+          }
+
+          Write-Host "Running silent Vulkan SDK installer..."
+          $installArgs = @(
+            "--accept-licenses",
+            "--default-answer",
+            "--confirm-command",
+            "--root", $sdkRoot,
+            "--remove-previous-versions",
+            "--disable-instance-layers",
+            "--component", "VulkanSDK"
+          )
+
+          $process = Start-Process -FilePath (Resolve-Path $installer) -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) {
+            throw "Vulkan SDK installer exited with code $($process.ExitCode)"
+          }
+
+          if (-not (Test-Path "$sdkRoot\Bin\glslc.exe")) {
+            throw "Vulkan SDK installation did not produce expected binaries under $sdkRoot"
+          }
+
+          $env:VULKAN_SDK = $sdkRoot
           "VULKAN_SDK=$($env:VULKAN_SDK)" >> $Env:GITHUB_ENV
           "$($env:VULKAN_SDK)\\Bin" >> $Env:GITHUB_PATH
 
