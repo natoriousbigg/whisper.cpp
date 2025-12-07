@@ -690,29 +690,22 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-          Write-Host "Installing Vulkan SDK via Chocolatey"
-          choco feature enable -n=useEnhancedExitCodes | Out-Null
+          Write-Host "Installing Vulkan SDK via winget"
 
           $installArgs = @(
             'install',
-            'vulkan-sdk',
-            '--yes',
-            '--no-progress',
-            '--source', 'https://community.chocolatey.org/api/v2/'
+            '--id', 'Khronos.Group.VulkanSDK',
+            '--exact',
+            '--accept-package-agreements',
+            '--accept-source-agreements',
+            '--silent',
+            '--source', 'winget'
           )
 
-          Write-Host "Attempting primary install"
-          choco @installArgs
+          winget @installArgs
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Chocolatey install failed with exit code $LASTEXITCODE, retrying with checksum override"
-            choco @installArgs --ignore-checksums
-          }
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Chocolatey failed to install Vulkan SDK (exit $LASTEXITCODE)"
+            Write-Error "winget failed to install Vulkan SDK (exit $LASTEXITCODE)"
             exit $LASTEXITCODE
           }
 
@@ -736,7 +729,7 @@ jobs:
           }
 
           if (-not $sdkRoot) {
-            Write-Error "Vulkan SDK not found after Chocolatey installation"
+            Write-Error "Vulkan SDK not found after winget installation"
             exit 1
           }
 
