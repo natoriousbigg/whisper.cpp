@@ -223,12 +223,11 @@ jobs:
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.15
         with:
-          method: local
+          method: network
           cuda: "12.4.1"
           # Only install essential CUDA components needed for building:
           # nvcc: CUDA compiler, cudart: CUDA runtime, thrust: C++ template library for CUDA
           sub-packages: '["nvcc", "cudart", "thrust"]'
-          use-github-cache: false
 
       - name: Install dependencies
         run: |
