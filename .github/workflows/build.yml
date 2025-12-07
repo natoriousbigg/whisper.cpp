@@ -223,8 +223,10 @@ jobs:
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.15
         with:
-          method: network
+          method: local
           cuda: "12.4.1"
+          sub-packages: '["nvcc", "cudart", "thrust"]'
+          use-github-cache: false
 
       - name: Install dependencies
         run: |
@@ -260,8 +262,18 @@ jobs:
 
       - name: Cleanup before packaging
         run: |
+          # Remove CUDA toolkit to free up space
+          sudo rm -rf /usr/local/cuda* || true
+          sudo rm -rf /usr/local/share/nvidia || true
+          # Remove build artifacts except bin directory
           find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
-          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* || true
+          # Clean package manager caches
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
+          # Remove docker images if present
+          docker system prune -af || true
+          # Report disk usage
+          df -h
 
       - name: Package whisper-cli (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
