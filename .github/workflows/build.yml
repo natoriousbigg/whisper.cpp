@@ -221,10 +221,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.15
-        with:
-          method: network
-          cuda: "12.4.1"
+        run: |
+          # Install CUDA repository
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
+          sudo dpkg -i cuda-keyring_1.0-1_all.deb
+          sudo apt-get update
+          
+          # Install minimal CUDA toolkit to minimize disk usage
+          # Using cuda-minimal-build metapackage which includes only build essentials
+          sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
+          
+          # Set CUDA environment variables
+          echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
+          echo "CUDA_PATH_V12_4=/usr/local/cuda-12.4" >> $GITHUB_ENV
+          echo "/usr/local/cuda-12.4/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
@@ -260,8 +271,18 @@ jobs:
 
       - name: Cleanup before packaging
         run: |
+          # Remove CUDA toolkit to free up space
+          sudo rm -rf /usr/local/cuda* || true
+          sudo rm -rf /usr/local/share/nvidia || true
+          # Remove build artifacts except bin directory
           find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
-          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* || true
+          # Clean package manager caches
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
+          # Remove docker images if present
+          docker system prune -af || true
+          # Report disk usage
+          df -h
 
       - name: Package whisper-cli (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
