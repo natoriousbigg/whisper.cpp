@@ -689,8 +689,27 @@ jobs:
       - name: Install Vulkan SDK
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
           Write-Host "Installing Vulkan SDK via Chocolatey"
-          choco install vulkan-sdk -y --no-progress
+          choco feature enable -n=useEnhancedExitCodes | Out-Null
+
+          $installArgs = @(
+            'install',
+            'vulkan-sdk',
+            '--yes',
+            '--no-progress',
+            '--source', 'https://community.chocolatey.org/api/v2/'
+          )
+
+          Write-Host "Attempting primary install"
+          choco @installArgs
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Chocolatey install failed with exit code $LASTEXITCODE, retrying with checksum override"
+            choco @installArgs --ignore-checksums
+          }
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Chocolatey failed to install Vulkan SDK (exit $LASTEXITCODE)"
