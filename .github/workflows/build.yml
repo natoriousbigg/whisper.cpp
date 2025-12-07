@@ -131,6 +131,17 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Maximize disk space
+        uses: jlumbroso/maximize-build-disk-space@v1
+        with:
+          root-reserve-mb: 4096
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-cached-tools: true
+        continue-on-error: true
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
@@ -142,6 +153,7 @@ jobs:
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
           sudo apt-get install -y build-essential cmake pkg-config \
+            ninja-build \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
@@ -152,7 +164,7 @@ jobs:
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
-          cmake -S . -B build \
+          cmake -S . -B build -G Ninja \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -213,6 +225,17 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Maximize disk space
+        uses: jlumbroso/maximize-build-disk-space@v1
+        with:
+          root-reserve-mb: 4096
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-cached-tools: true
+        continue-on-error: true
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
@@ -224,6 +247,7 @@ jobs:
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
           sudo apt-get install -y build-essential cmake pkg-config \
+            ninja-build \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
@@ -234,8 +258,116 @@ jobs:
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
-          cmake -S . -B build \
+          cmake -S . -B build -G Ninja \
             -DGGML_VULKAN=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            ${EXTRA_CMAKE}
+
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+
+      - name: Package whisper-cli (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
+          popd
+
+      - name: Package full build (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
+          popd
+
+      - name: Upload whisper-cli package
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
+      - name: Upload full package (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
+  ubuntu-build-openblas-cuda-x64:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Ubuntu x64 (CUDA + OpenBLAS)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      COMPILER_PACKAGES: ""
+      BLAS_PACKAGE: "libopenblas-dev"
+      PACKAGE_SUFFIX: "-openblas-cuda"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DGGML_CUDA=ON"
+      CUDAToolkit_ROOT: /usr/local/cuda
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Maximize disk space
+        uses: jlumbroso/maximize-build-disk-space@v1
+        with:
+          root-reserve-mb: 4096
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-cached-tools: true
+        continue-on-error: true
+
+      - name: Install CUDA toolkit
+        id: cuda-toolkit
+        uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: "12.4.1"
+          linux-version: ubuntu2204
+          method: network
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
+          fi
+          sudo apt-get install -y build-essential cmake pkg-config \
+            ninja-build \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            $EXTRA_PACKAGES
+
+          CUDA_BASE=${CUDA_PATH:-${CUDAToolkit_ROOT}}
+          echo "CUDA_HOME=${CUDA_BASE}" | tee -a "$GITHUB_ENV"
+          echo "CUDAToolkit_ROOT=${CUDA_BASE}" | tee -a "$GITHUB_ENV"
+          echo "CUDACXX=${CUDA_BASE}/bin/nvcc" | tee -a "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${CUDA_BASE}/lib64:${LD_LIBRARY_PATH}" | tee -a "$GITHUB_ENV"
+          echo "${CUDA_BASE}/bin" | tee -a "$GITHUB_PATH"
+
+          nvcc --version
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          cmake -S . -B build -G Ninja \
+            -DCUDAToolkit_ROOT=${CUDAToolkit_ROOT} \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
             -DWHISPER_BUILD_EXAMPLES=ON \
@@ -295,6 +427,17 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Maximize disk space
+        uses: jlumbroso/maximize-build-disk-space@v1
+        with:
+          root-reserve-mb: 4096
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-cached-tools: true
+        continue-on-error: true
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
@@ -306,6 +449,7 @@ jobs:
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
           sudo apt-get install -y build-essential cmake pkg-config \
+            ninja-build \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
@@ -316,7 +460,7 @@ jobs:
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
-          cmake -S . -B build \
+          cmake -S . -B build -G Ninja \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -591,21 +735,33 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Maximize disk space
+        uses: jlumbroso/maximize-build-disk-space@v1
+        with:
+          root-reserve-mb: 4096
+          remove-android: true
+          remove-dotnet: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-cached-tools: true
+        continue-on-error: true
+
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          update: true
+          update: false
           install: >-
-            base-devel
-            git
             ${{ matrix.pkg_prefix }}-toolchain
             ${{ matrix.pkg_prefix }}-cmake
             ${{ matrix.pkg_prefix }}-ninja
-            ${{ matrix.pkg_prefix }}-python
-            ${{ matrix.pkg_prefix }}-pkg-config
             ${{ matrix.pkg_prefix }}-openblas
             zip
+
+      - name: Clean MSYS2 package cache
+        shell: msys2 {0}
+        run: |
+          pacman -Scc --noconfirm || true
 
       - name: Configure
         shell: msys2 {0}
@@ -655,9 +811,129 @@ jobs:
           name: whisper.cpp-full-windows-${{ matrix.arch }}-openblas
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas.zip
 
+  windows-build-openblas-cuda:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows (OpenBLAS + CUDA)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            msystem: MINGW64
+            pkg_prefix: mingw-w64-x86_64
+
+    runs-on: windows-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Maximize disk space
+        uses: jlumbroso/maximize-build-disk-space@v1
+        with:
+          root-reserve-mb: 4096
+          remove-android: true
+          remove-dotnet: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-cached-tools: true
+        continue-on-error: true
+
+      - name: Free disk space
+        run: |
+          Remove-Item -Path "C:\\ProgramData\\Package Cache" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\ProgramData\\chocolatey\\lib\\llvm" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\ProgramData\\chocolatey\\lib\\clang" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\ProgramData\\chocolatey\\cache" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\Users\\runneradmin\\.nuget\\packages" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\Users\\runneradmin\\AppData\\Local\\NuGet\\Cache" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\Windows\\Temp\\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:TEMP\\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\Common7\\IDE\\Extensions" -Recurse -Force -ErrorAction SilentlyContinue
+          Get-PSDrive C | Format-Table
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: "12.4.1"
+          method: network
+
+      - name: Setup CUDA environment
+        run: |
+          echo "CUDACXX=$env:CUDA_PATH\\bin\\nvcc.exe" >> $env:GITHUB_ENV
+          echo "PATH=$env:CUDA_PATH\\bin;$env:PATH" >> $env:GITHUB_ENV
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: false
+          install: >-
+            ${{ matrix.pkg_prefix }}-toolchain
+            ${{ matrix.pkg_prefix }}-cmake
+            ${{ matrix.pkg_prefix }}-ninja
+            ${{ matrix.pkg_prefix }}-openblas
+            zip
+
+      - name: Clean MSYS2 package cache
+        shell: msys2 {0}
+        run: |
+          pacman -Scc --noconfirm || true
+
+      - name: Configure
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DGGML_VULKAN=OFF \
+            -DGGML_CUDA=ON \
+            -DGGML_BLAS=ON \
+            -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DWHISPER_SDL2=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          cmake --build build --config Release -- -j 4
+
+      - name: Bundle runtime DLLs (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          exe_path="build/bin/whisper-cli.exe"
+          target_bin="${MINGW_PREFIX:-/mingw64}/bin"
+
+          deps=$(ldd "$exe_path" | awk '/=>/ { print $3 }' | grep "^${target_bin}/" | sort -u || true)
+          for dep in $deps; do
+            cp -u "$dep" build/bin/
+          done
+
+      - name: Package full build (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-cuda.zip" .
+          popd
+
+      - name: Upload full package (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-openblas-cuda
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-cuda.zip
+
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-vulkan-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan, windows-build-openblas]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-vulkan-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan, windows-build-openblas, windows-build-openblas-cuda]
     runs-on: ubuntu-latest
 
     steps:
