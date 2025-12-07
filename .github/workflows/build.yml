@@ -192,12 +192,27 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip" whisper-cli
           popd
 
+      - name: Package full build (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip" .
+          popd
+
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip
+
+      - name: Upload full package (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip
 
   macos-build:
     needs: determine-tag
@@ -239,12 +254,89 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" whisper-cli
           popd
 
+      - name: Package full build (macOS)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin/Release
+          zip -9 -r "../../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" .
+          popd
+
       - name: Upload whisper-cli package (macOS)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-macos
+          name: whisper-cli-macos-coreml
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
+
+      - name: Upload full package (macOS)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-macos-coreml
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
+
+  macos-build-metal:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    runs-on: macos-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          brew update
+          cmake --version
+          brew install sdl2
+
+      - name: Build (Metal only)
+        run: |
+          sysctl -a
+          git config --global --add safe.directory /workspace
+          cmake -B build -G Xcode \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DGGML_COREML=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
+
+      - name: Package whisper-cli (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/Release/whisper-cli dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" whisper-cli
+          popd
+
+      - name: Package full build (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin/Release
+          zip -9 -r "../../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" .
+          popd
+
+      - name: Upload whisper-cli package (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-macos-metal
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
+
+      - name: Upload full package (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-macos-metal
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
 
   windows-build:
     needs: determine-tag
@@ -315,6 +407,15 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe
           popd
 
+      - name: Package full build (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" .
+          popd
+
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
@@ -322,29 +423,30 @@ jobs:
           name: whisper-cli-windows-${{ matrix.arch }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
 
+      - name: Upload full package (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-windows-${{ matrix.arch }}
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
+
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build, macos-build, windows-build]
+    needs: [determine-tag, ubuntu-build, macos-build, macos-build-metal, windows-build]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Ubuntu package
+      - name: Download whisper-cli packages
         uses: actions/download-artifact@v4
         with:
-          pattern: whisper-cli-ubuntu-*
+          pattern: whisper-cli-*
           path: release
           merge-multiple: true
 
-      - name: Download macOS package
+      - name: Download full packages
         uses: actions/download-artifact@v4
         with:
-          name: whisper-cli-macos
-          path: release
-
-      - name: Download Windows package
-        uses: actions/download-artifact@v4
-        with:
-          pattern: whisper-cli-windows-*
+          pattern: full-*
           path: release
           merge-multiple: true
 
