@@ -830,9 +830,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
-          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ hashFiles('.github/workflows/build.yml') }}
+          # Cache key includes oneAPI version only - workflow changes don't affect oneAPI installation
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-
             ${{ runner.os }}-oneapi-
 
       - name: Check oneAPI cache status
@@ -1004,7 +1004,7 @@ jobs:
           Write-Host "Installing NVIDIA CUDA Toolkit..."
           Write-Host "Note: This installation will be cached for subsequent workflow runs."
           
-          # Install CUDA Toolkit via Chocolatey
+          # Install CUDA Toolkit via Chocolatey (better CUDA support than winget)
           choco install cuda --version=${{ env.CUDA_VERSION }} -y --no-progress
           
           if ($LASTEXITCODE -ne 0) {
