@@ -202,19 +202,19 @@ jobs:
           rm -rf build dist
           sudo rm -rf /var/cache/apt/archives || true
 
-  ubuntu-build-openblas-cuda-x64:
+  ubuntu-build-cuda-x64:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Ubuntu x64 (CUDA + OpenBLAS)
+    name: Ubuntu x64 (CUDA)
     runs-on: ubuntu-22.04
     env:
       ARCH: x64
       DEB_ARCH: amd64
       TRIPLET: x86_64-linux-gnu
       COMPILER_PACKAGES: ""
-      BLAS_PACKAGE: "libopenblas-dev"
-      PACKAGE_SUFFIX: "-openblas-cuda"
-      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DGGML_CUDA=ON -DGGML_VULKAN=OFF"
+      BLAS_PACKAGE: ""
+      PACKAGE_SUFFIX: "-cuda"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_CUDA=ON -DGGML_VULKAN=OFF"
 
     steps:
       - name: Clone
@@ -257,6 +257,11 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
+
+      - name: Cleanup before packaging
+        run: |
+          find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
+          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* || true
 
       - name: Package whisper-cli (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -567,21 +572,21 @@ jobs:
             cp -u "$dep" build/bin/
           done
 
-      - name: Package full build (Windows ${{ matrix.arch }})
+      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: msys2 {0}
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-mingw64.zip" .
           popd
 
-      - name: Upload full package (Windows ${{ matrix.arch }})
+      - name: Upload full package (Windows ${{ matrix.arch }} Vulkan MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan-mingw64
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-mingw64.zip
 
   windows-build:
     needs: determine-tag
@@ -646,21 +651,132 @@ jobs:
             cp -u "$dep" build/bin/
           done
 
-      - name: Package full build (Windows ${{ matrix.arch }})
+      - name: Package full build (Windows ${{ matrix.arch }} MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: msys2 {0}
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-mingw64.zip" .
           popd
 
-      - name: Upload full package (Windows ${{ matrix.arch }})
+      - name: Upload full package (Windows ${{ matrix.arch }} MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}.zip
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-mingw64
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-mingw64.zip
+
+  windows-build-vulkan-msvc:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows x64 (Vulkan, MSVC)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+
+    runs-on: windows-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Install Vulkan SDK
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "Installing Vulkan SDK via winget"
+
+          $installArgs = @(
+            'install',
+            '--id', 'KhronosGroup.VulkanSDK',
+            '--accept-package-agreements',
+            '--accept-source-agreements',
+            '--silent',
+            '--source', 'winget'
+          )
+
+          winget @installArgs
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "winget failed to install Vulkan SDK (exit $LASTEXITCODE)"
+            exit $LASTEXITCODE
+          }
+
+          $searchRoots = @(
+            "C:\\VulkanSDK",
+            "$Env:ProgramFiles\\VulkanSDK",
+            "$Env:ProgramFiles(x86)\\VulkanSDK"
+          )
+
+          $sdkRoot = $null
+          foreach ($root in $searchRoots) {
+            if (-not (Test-Path $root)) {
+              continue
+            }
+
+            $candidate = Get-ChildItem $root -Directory | Sort-Object Name -Descending | Select-Object -First 1
+            if ($candidate) {
+              $sdkRoot = $candidate.FullName
+              break
+            }
+          }
+
+          if (-not $sdkRoot) {
+            Write-Error "Vulkan SDK not found after winget installation"
+            exit 1
+          }
+
+          "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure (Vulkan MSVC)
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          if not defined VULKAN_SDK exit /b 1
+          set "PATH=%VULKAN_SDK%\Bin;%PATH%"
+          cmake -S . -B build -G "Ninja" ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
+            -DGGML_VULKAN=ON ^
+            -DWHISPER_SDL2=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF ^
+            -DWHISPER_BUILD_EXAMPLES=ON ^
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build (Vulkan MSVC)
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          if not defined VULKAN_SDK exit /b 1
+          set "PATH=%VULKAN_SDK%\Bin;%PATH%"
+          cmake --build build --config Release -- -v
+
+      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MSVC)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: cmd
+        run: |
+          mkdir dist
+          pushd build\bin
+          tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip .
+          popd
+
+      - name: Upload full package (Windows ${{ matrix.arch }} Vulkan MSVC)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan-msvc
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip
 
   windows-build-intelgpu:
     needs: determine-tag
@@ -731,7 +847,7 @@ jobs:
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-cuda-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-vulkan, windows-build, windows-build-intelgpu]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-vulkan, windows-build, windows-build-intelgpu, windows-build-vulkan-msvc]
     runs-on: ubuntu-latest
 
     steps:
