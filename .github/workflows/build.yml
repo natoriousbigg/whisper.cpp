@@ -812,9 +812,11 @@ jobs:
     runs-on: windows-latest
     
     env:
-      # Standard Intel oneAPI installation directory on Windows
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2024.x)
       # Update this path if Intel changes their default installation location
       ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
+      # oneAPI version for cache key - update when upgrading oneAPI
+      ONEAPI_VERSION: "2024.1"
 
     steps:
       - name: Clone
@@ -828,10 +830,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
-          # Cache key includes oneAPI version - update '2024.1' when upgrading oneAPI
-          key: ${{ runner.os }}-oneapi-2024.1-${{ hashFiles('.github/workflows/build.yml') }}
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ hashFiles('.github/workflows/build.yml') }}
           restore-keys: |
-            ${{ runner.os }}-oneapi-2024.1-
+            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-
             ${{ runner.os }}-oneapi-
 
       - name: Check oneAPI cache status
@@ -868,16 +869,41 @@ jobs:
             Write-Host "Installation completed successfully"
           }
 
-      - name: Set oneAPI environment variables
+      - name: Set oneAPI environment variables and verify installation
         shell: powershell
         run: |
           echo "ONEAPI_ROOT=$env:ONEAPI_INSTALL_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           
-          # Verify installation
-          if (Test-Path $env:ONEAPI_INSTALL_PATH) {
-            Write-Host "✓ oneAPI installation verified at: $env:ONEAPI_INSTALL_PATH"
+          # Verify essential components are present
+          $setvarsPath = Join-Path $env:ONEAPI_INSTALL_PATH "setvars.bat"
+          $compilerPath = Join-Path $env:ONEAPI_INSTALL_PATH "compiler"
+          
+          $installValid = $true
+          
+          if (-not (Test-Path $env:ONEAPI_INSTALL_PATH)) {
+            Write-Host "✗ Error: oneAPI installation directory not found at: $env:ONEAPI_INSTALL_PATH"
+            $installValid = $false
+          } elseif (-not (Test-Path $setvarsPath)) {
+            Write-Host "✗ Error: setvars.bat not found - oneAPI installation may be incomplete"
+            $installValid = $false
+          } elseif (-not (Test-Path $compilerPath)) {
+            Write-Host "✗ Error: Compiler directory not found - oneAPI installation may be incomplete"
+            $installValid = $false
           } else {
-            Write-Host "⚠ Warning: oneAPI path not found, build may fail"
+            Write-Host "✓ oneAPI installation verified at: $env:ONEAPI_INSTALL_PATH"
+            Write-Host "✓ Essential components found (setvars.bat, compiler)"
+          }
+          
+          if (-not $installValid) {
+            Write-Host ""
+            Write-Host "Installation validation failed. The build will likely fail."
+            Write-Host "This can happen if:"
+            Write-Host "  1. Installation was interrupted or incomplete"
+            Write-Host "  2. Cache was corrupted"
+            Write-Host "  3. Disk space ran out during installation"
+            Write-Host ""
+            Write-Host "To fix: Manually invalidate the cache and re-run the workflow"
+            exit 1
           }
 
       - name: Configure (Intel GPU)
