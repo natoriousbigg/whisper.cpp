@@ -751,9 +751,103 @@ jobs:
           name: whisper.cpp-full-windows-${{ matrix.arch }}-openblas
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas.zip
 
+  windows-build-openblas-cuda:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows (OpenBLAS + CUDA)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            msystem: MINGW64
+            pkg_prefix: mingw-w64-x86_64
+
+    runs-on: windows-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: "12.4.1"
+          method: network
+
+      - name: Setup CUDA environment
+        run: |
+          echo "CUDACXX=$env:CUDA_PATH\\bin\\nvcc.exe" >> $env:GITHUB_ENV
+          echo "PATH=$env:CUDA_PATH\\bin;$env:PATH" >> $env:GITHUB_ENV
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: >-
+            base-devel
+            git
+            ${{ matrix.pkg_prefix }}-toolchain
+            ${{ matrix.pkg_prefix }}-cmake
+            ${{ matrix.pkg_prefix }}-ninja
+            ${{ matrix.pkg_prefix }}-python
+            ${{ matrix.pkg_prefix }}-pkg-config
+            ${{ matrix.pkg_prefix }}-openblas
+            zip
+
+      - name: Configure
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DGGML_VULKAN=OFF \
+            -DGGML_CUDA=ON \
+            -DGGML_BLAS=ON \
+            -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DWHISPER_SDL2=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          cmake --build build --config Release -- -j 4
+
+      - name: Bundle runtime DLLs (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          exe_path="build/bin/whisper-cli.exe"
+          target_bin="${MINGW_PREFIX:-/mingw64}/bin"
+
+          deps=$(ldd "$exe_path" | awk '/=>/ { print $3 }' | grep "^${target_bin}/" | sort -u || true)
+          for dep in $deps; do
+            cp -u "$dep" build/bin/
+          done
+
+      - name: Package full build (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-cuda.zip" .
+          popd
+
+      - name: Upload full package (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-openblas-cuda
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-cuda.zip
+
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-vulkan-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan, windows-build-openblas]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-vulkan-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan, windows-build-openblas, windows-build-openblas-cuda]
     runs-on: ubuntu-latest
 
     steps:
