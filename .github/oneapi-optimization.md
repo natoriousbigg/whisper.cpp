@@ -9,11 +9,14 @@ The Windows IntelGPU build requires Intel oneAPI Base Toolkit for SYCL support. 
 The primary optimization is caching the oneAPI installation between workflow runs:
 
 ```yaml
+env:
+  ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
+
 - name: Cache Intel oneAPI
   id: cache-oneapi
   uses: actions/cache@v4
   with:
-    path: C:\Program Files (x86)\Intel\oneAPI
+    path: ${{ env.ONEAPI_INSTALL_PATH }}
     key: ${{ runner.os }}-oneapi-2024.1-${{ hashFiles('.github/workflows/build.yml') }}
     restore-keys: |
       ${{ runner.os }}-oneapi-2024.1-

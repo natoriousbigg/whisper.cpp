@@ -33,11 +33,14 @@ Implemented GitHub Actions caching with improved logging and verification to dra
 
 ### 1. Caching Strategy
 ```yaml
+env:
+  ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
+
 - name: Cache Intel oneAPI
   id: cache-oneapi
   uses: actions/cache@v4
   with:
-    path: C:\Program Files (x86)\Intel\oneAPI
+    path: ${{ env.ONEAPI_INSTALL_PATH }}
     key: ${{ runner.os }}-oneapi-2024.1-${{ hashFiles('.github/workflows/build.yml') }}
     restore-keys: |
       ${{ runner.os }}-oneapi-2024.1-
