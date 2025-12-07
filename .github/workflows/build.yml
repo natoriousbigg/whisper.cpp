@@ -838,11 +838,12 @@ jobs:
       - name: Check oneAPI cache status
         shell: powershell
         run: |
-          if ('${{ steps.cache-oneapi.outputs.cache-hit }}' -eq 'true') {
-            Write-Host "✓ oneAPI cache hit - using cached installation"
+          $cacheHit = '${{ steps.cache-oneapi.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "oneAPI cache hit - using cached installation"
             Write-Host "Installation time saved: ~20 minutes"
           } else {
-            Write-Host "⚠ oneAPI cache miss - will install and cache for future runs"
+            Write-Host "oneAPI cache miss - will install and cache for future runs"
             Write-Host "This will take approximately 15-20 minutes"
           }
 
@@ -989,11 +990,12 @@ jobs:
       - name: Check CUDA cache status
         shell: powershell
         run: |
-          if ('${{ steps.cache-cuda.outputs.cache-hit }}' -eq 'true') {
-            Write-Host "✓ CUDA cache hit - using cached installation"
+          $cacheHit = '${{ steps.cache-cuda.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "CUDA cache hit - using cached installation"
             Write-Host "Installation time saved: ~10 minutes"
           } else {
-            Write-Host "⚠ CUDA cache miss - will install and cache for future runs"
+            Write-Host "CUDA cache miss - will install and cache for future runs"
             Write-Host "This will take approximately 10 minutes"
           }
 
