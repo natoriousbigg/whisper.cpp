@@ -689,40 +689,23 @@ jobs:
       - name: Install Vulkan SDK
         shell: powershell
         run: |
-          $baseArgs = @(
-            "install"
-            "--id" "LunarG.VulkanSDK"
-            "--exact"
-            "--source" "winget"
-            "--silent"
-            "--disable-interactivity"
-            "--accept-package-agreements"
-            "--accept-source-agreements"
-          )
+          $installerPath = Join-Path $Env:TEMP "vulkan-sdk.exe"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe"
 
-          function Install-VulkanSdk {
-            param(
-              [string]$Scope
-            )
+          Write-Host "Downloading Vulkan SDK from $downloadUrl"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath -UseBasicParsing
 
-            $args = @($baseArgs)
-            if ($Scope) {
-              $args += @("--scope" , $Scope)
-            }
-
-            Write-Host "Installing Vulkan SDK with scope '$Scope' via winget"
-            winget @args
-            return $LASTEXITCODE
+          if (-not (Test-Path $installerPath)) {
+            Write-Error "Vulkan SDK installer was not downloaded"
+            exit 1
           }
 
-          $exitCode = Install-VulkanSdk "machine"
-          if ($exitCode -ne 0) {
-            Write-Warning "Machine-scope Vulkan SDK install failed with exit code $exitCode; retrying with user scope"
-            $exitCode = Install-VulkanSdk "user"
-          }
+          Write-Host "Installing Vulkan SDK silently"
+          & $installerPath /S
 
-          if ($exitCode -ne 0) {
-            Write-Error "Vulkan SDK installation failed via winget"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Vulkan SDK installer exited with code $LASTEXITCODE"
+            exit $LASTEXITCODE
           }
 
           $searchRoots = @(
@@ -746,6 +729,7 @@ jobs:
 
           if (-not $sdkRoot) {
             Write-Error "Vulkan SDK not found after installation"
+            exit 1
           }
 
           "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
