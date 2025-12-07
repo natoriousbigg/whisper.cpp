@@ -126,12 +126,32 @@ jobs:
             triplet: x86_64-linux-gnu
             compiler_packages: ""
             extra_cmake: "-DWHISPER_SDL2=ON"
+            openblas: false
+            package_suffix: "vulkan"
+          - os: ubuntu-22.04
+            arch: x64
+            deb_arch: amd64
+            triplet: x86_64-linux-gnu
+            compiler_packages: ""
+            extra_cmake: "-DWHISPER_SDL2=ON"
+            openblas: true
+            package_suffix: "openblas-vulkan"
           - os: ubuntu-22.04
             arch: x86
             deb_arch: i386
             triplet: i386-linux-gnu
             compiler_packages: "gcc-i686-linux-gnu g++-i686-linux-gnu"
             extra_cmake: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF -DWHISPER_BUILD_EXAMPLES=OFF"
+            openblas: false
+            package_suffix: "vulkan"
+          - os: ubuntu-22.04
+            arch: x86
+            deb_arch: i386
+            triplet: i386-linux-gnu
+            compiler_packages: "gcc-i686-linux-gnu g++-i686-linux-gnu"
+            extra_cmake: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF -DWHISPER_BUILD_EXAMPLES=OFF"
+            openblas: true
+            package_suffix: "openblas-vulkan"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -144,16 +164,27 @@ jobs:
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
+          OPENBLAS_PACKAGES=""
+          if [[ "${{ matrix.openblas }}" == "true" ]]; then
+            OPENBLAS_PACKAGES="libopenblas-dev:${{ matrix.deb_arch }}"
+          fi
+
           sudo apt-get install -y build-essential cmake pkg-config \
             ${{ matrix.compiler_packages }} \
             libsdl2-dev:${{ matrix.deb_arch }} \
             libvulkan-dev:${{ matrix.deb_arch }} \
-            vulkan-sdk
+            vulkan-sdk \
+            ${OPENBLAS_PACKAGES}
 
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${{ matrix.triplet }}/pkgconfig:/usr/share/pkgconfig"
+          OPENBLAS_FLAGS=""
+          if [[ "${{ matrix.openblas }}" == "true" ]]; then
+            OPENBLAS_FLAGS="-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
+          fi
+
           cmake -S . -B build \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
@@ -161,7 +192,8 @@ jobs:
             -DWHISPER_BUILD_EXAMPLES=ON \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_SERVER=OFF \
-            ${{ matrix.extra_cmake }}
+            ${{ matrix.extra_cmake }} \
+            ${OPENBLAS_FLAGS}
 
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
@@ -172,15 +204,15 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-vulkan.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-${{ matrix.package_suffix }}.zip" whisper-cli
           popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-ubuntu-${{ matrix.arch }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-vulkan.zip
+          name: whisper-cli-ubuntu-${{ matrix.arch }}-${{ matrix.package_suffix }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-${{ matrix.package_suffix }}.zip
 
   macos-build:
     needs: determine-tag
