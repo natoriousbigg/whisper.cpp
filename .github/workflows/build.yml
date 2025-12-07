@@ -694,7 +694,7 @@ jobs:
 
           $installArgs = @(
             'install',
-            '--id', 'LunarG.VulkanSDK',
+            '--id', 'KhronosGroup.VulkanSDK',
             '--accept-package-agreements',
             '--accept-source-agreements',
             '--silent',
