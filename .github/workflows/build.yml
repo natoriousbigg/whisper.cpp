@@ -290,11 +290,17 @@ jobs:
       BLAS_PACKAGE: "libopenblas-dev"
       PACKAGE_SUFFIX: "-openblas-cuda"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DGGML_CUDA=ON"
-      CUDAToolkit_ROOT: /usr/lib/nvidia-cuda-toolkit
+      CUDAToolkit_ROOT: /usr/local/cuda
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit
+        id: cuda-toolkit
+        uses: Jimver/cuda-toolkit@v0
+        with:
+          cuda: "12.4.1"
 
       - name: Install dependencies
         run: |
@@ -307,13 +313,10 @@ jobs:
           sudo apt-get install -y build-essential cmake pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
-            nvidia-cuda-toolkit \
             $EXTRA_PACKAGES
 
-          echo "CUDAToolkit_ROOT=${CUDAToolkit_ROOT}" | tee -a "$GITHUB_ENV"
           echo "CUDA_HOME=${CUDAToolkit_ROOT}" | tee -a "$GITHUB_ENV"
           echo "CUDACXX=${CUDAToolkit_ROOT}/bin/nvcc" | tee -a "$GITHUB_ENV"
-          echo "/usr/bin" | tee -a "$GITHUB_PATH"
           echo "${CUDAToolkit_ROOT}/bin" | tee -a "$GITHUB_PATH"
           nvcc --version
 
