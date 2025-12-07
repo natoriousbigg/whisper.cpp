@@ -154,7 +154,7 @@ jobs:
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_VULKAN=ON \
+            -DGGML_VULKAN=OFF \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
             -DWHISPER_BUILD_EXAMPLES=ON \
@@ -196,10 +196,16 @@ jobs:
           name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
-  ubuntu-build-openblas-vulkan-x64:
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          rm -rf build dist
+          sudo rm -rf /var/cache/apt/archives || true
+
+  ubuntu-build-openblas-cuda-x64:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Ubuntu x64 (Vulkan + OpenBLAS)
+    name: Ubuntu x64 (CUDA + OpenBLAS)
     runs-on: ubuntu-22.04
     env:
       ARCH: x64
@@ -207,18 +213,21 @@ jobs:
       TRIPLET: x86_64-linux-gnu
       COMPILER_PACKAGES: ""
       BLAS_PACKAGE: "libopenblas-dev"
-      PACKAGE_SUFFIX: "-openblas-vulkan"
-      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
+      PACKAGE_SUFFIX: "-openblas-cuda"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DGGML_CUDA=ON -DGGML_VULKAN=OFF"
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.15
+        with:
+          cuda: "12.4.1"
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
           EXTRA_PACKAGES=""
           if [[ -n "${BLAS_PACKAGE}" ]]; then
@@ -227,9 +236,9 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
-            libvulkan-dev:${DEB_ARCH} \
-            vulkan-sdk \
             $EXTRA_PACKAGES
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: Configure
         run: |
@@ -237,7 +246,7 @@ jobs:
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_VULKAN=ON \
+            -DGGML_VULKAN=OFF \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
             -DWHISPER_BUILD_EXAMPLES=ON \
@@ -660,7 +669,7 @@ jobs:
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-vulkan-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan, windows-build-openblas]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-cuda-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan, windows-build-openblas]
     runs-on: ubuntu-latest
 
     steps:
