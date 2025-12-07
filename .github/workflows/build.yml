@@ -981,9 +981,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ hashFiles('.github/workflows/build.yml') }}
+          # Cache key includes CUDA version only - workflow changes don't affect CUDA installation
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
             ${{ runner.os }}-cuda-
 
       - name: Check CUDA cache status
@@ -991,10 +991,10 @@ jobs:
         run: |
           if ("${{ steps.cache-cuda.outputs.cache-hit }}" -eq "true") {
             Write-Host "✓ CUDA cache hit - using cached installation"
-            Write-Host "Installation time saved: ~15 minutes"
+            Write-Host "Installation time saved: ~10 minutes"
           } else {
             Write-Host "⚠ CUDA cache miss - will install and cache for future runs"
-            Write-Host "This will take approximately 10-15 minutes"
+            Write-Host "This will take approximately 10 minutes"
           }
 
       - name: Install CUDA Toolkit
@@ -1005,7 +1005,7 @@ jobs:
           Write-Host "Note: This installation will be cached for subsequent workflow runs."
           
           # Install CUDA Toolkit via Chocolatey
-          choco install cuda --version=12.4.1 -y --no-progress
+          choco install cuda --version=${{ env.CUDA_VERSION }} -y --no-progress
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "✗ Error: Installation failed with exit code $LASTEXITCODE"
