@@ -228,20 +228,18 @@ jobs:
           sudo apt-get update
           
           # Install only essential CUDA components to minimize disk usage
-          # nvcc: CUDA compiler, cudart: runtime, cublas: linear algebra, thrust: C++ templates
+          # nvcc: CUDA compiler, cudart: runtime, cublas: linear algebra, nvtx: profiling
           sudo apt-get install -y \
             cuda-nvcc-12-4 \
             cuda-cudart-dev-12-4 \
             cuda-cublas-dev-12-4 \
-            libcublas-12-4 \
-            libcublas-dev-12-4 \
             cuda-nvtx-12-4 \
             cuda-libraries-dev-12-4
           
           # Set CUDA environment variables
           echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
           echo "CUDA_PATH_V12_4=/usr/local/cuda-12.4" >> $GITHUB_ENV
-          echo "CUDA_PATH_VX_Y=CUDA_PATH_V12_4" >> $GITHUB_ENV
+          echo "CUDA_PATH_VX_Y=/usr/local/cuda-12.4" >> $GITHUB_ENV
           echo "/usr/local/cuda-12.4/bin" >> $GITHUB_PATH
           echo "LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
