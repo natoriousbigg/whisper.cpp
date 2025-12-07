@@ -113,38 +113,19 @@ jobs:
           echo "name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
 
-  ubuntu-build:
+  ubuntu-build-vulkan-x64:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            arch: x64
-            deb_arch: amd64
-            triplet: x86_64-linux-gnu
-            compiler_packages: ""
-            blas_package: ""
-            package_suffix: "-vulkan"
-            extra_cmake: "-DWHISPER_SDL2=ON"
-          - os: ubuntu-22.04
-            arch: x64
-            deb_arch: amd64
-            triplet: x86_64-linux-gnu
-            compiler_packages: ""
-            blas_package: "libopenblas-dev"
-            package_suffix: "-openblas-vulkan"
-            extra_cmake: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
-          - os: ubuntu-22.04
-            arch: x86
-            deb_arch: i386
-            triplet: i386-linux-gnu
-            compiler_packages: "gcc-i686-linux-gnu g++-i686-linux-gnu"
-            blas_package: ""
-            package_suffix: "-vulkan"
-            extra_cmake: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF -DWHISPER_BUILD_EXAMPLES=OFF"
-    runs-on: ${{ matrix.os }}
+    name: Ubuntu x64 (Vulkan)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      COMPILER_PACKAGES: ""
+      BLAS_PACKAGE: ""
+      PACKAGE_SUFFIX: "-vulkan"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON"
 
     steps:
       - name: Clone
@@ -152,25 +133,25 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+          sudo dpkg --add-architecture ${DEB_ARCH}
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
           EXTRA_PACKAGES=""
-          if [[ -n "${{ matrix.blas_package }}" ]]; then
-            EXTRA_PACKAGES="${{ matrix.blas_package }}:${{ matrix.deb_arch }}"
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
           sudo apt-get install -y build-essential cmake pkg-config \
-            ${{ matrix.compiler_packages }} \
-            libsdl2-dev:${{ matrix.deb_arch }} \
-            libvulkan-dev:${{ matrix.deb_arch }} \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            libvulkan-dev:${DEB_ARCH} \
             vulkan-sdk \
             $EXTRA_PACKAGES
 
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
-          export PKG_CONFIG_LIBDIR="/usr/lib/${{ matrix.triplet }}/pkgconfig:/usr/share/pkgconfig"
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
           cmake -S . -B build \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
@@ -178,7 +159,7 @@ jobs:
             -DWHISPER_BUILD_EXAMPLES=ON \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_SERVER=OFF \
-            ${{ matrix.extra_cmake }}
+            ${EXTRA_CMAKE}
 
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
@@ -189,19 +170,199 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" whisper-cli
+          popd
+
+      - name: Package full build (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" .
           popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
 
-  macos-build:
+      - name: Upload full package (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+
+  ubuntu-build-openblas-vulkan-x64:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Ubuntu x64 (Vulkan + OpenBLAS)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      COMPILER_PACKAGES: ""
+      BLAS_PACKAGE: "libopenblas-dev"
+      PACKAGE_SUFFIX: "-openblas-vulkan"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
+          fi
+          sudo apt-get install -y build-essential cmake pkg-config \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            libvulkan-dev:${DEB_ARCH} \
+            vulkan-sdk \
+            $EXTRA_PACKAGES
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          cmake -S . -B build \
+            -DGGML_VULKAN=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            ${EXTRA_CMAKE}
+
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+
+      - name: Package whisper-cli (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" whisper-cli
+          popd
+
+      - name: Package full build (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" .
+          popd
+
+      - name: Upload whisper-cli package
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+
+      - name: Upload full package (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+
+  ubuntu-build-vulkan-x86:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Ubuntu x86 (Vulkan)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x86
+      DEB_ARCH: i386
+      TRIPLET: i386-linux-gnu
+      COMPILER_PACKAGES: "gcc-i686-linux-gnu g++-i686-linux-gnu"
+      BLAS_PACKAGE: ""
+      PACKAGE_SUFFIX: "-vulkan"
+      EXTRA_CMAKE: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF -DWHISPER_BUILD_EXAMPLES=OFF"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
+          fi
+          sudo apt-get install -y build-essential cmake pkg-config \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            libvulkan-dev:${DEB_ARCH} \
+            vulkan-sdk \
+            $EXTRA_PACKAGES
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          cmake -S . -B build \
+            -DGGML_VULKAN=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            ${EXTRA_CMAKE}
+
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+
+      - name: Package whisper-cli (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" whisper-cli
+          popd
+
+      - name: Package full build (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" .
+          popd
+
+      - name: Upload whisper-cli package
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+
+      - name: Upload full package (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+
+  macos-build-coreml:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: macOS (Metal + CoreML)
     runs-on: macos-latest
 
     steps:
@@ -239,16 +400,95 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" whisper-cli
           popd
 
+      - name: Package full build (macOS)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin/Release
+          zip -9 -r "../../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" .
+          popd
+
       - name: Upload whisper-cli package (macOS)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-macos
+          name: whisper-cli-macos-coreml
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
 
-  windows-build:
+      - name: Upload full package (macOS)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-macos-coreml
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
+
+  macos-build-metal:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: macOS (Metal only)
+    runs-on: macos-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          brew update
+          cmake --version
+          brew install sdl2
+
+      - name: Build (Metal only)
+        run: |
+          sysctl -a
+          git config --global --add safe.directory /workspace
+          cmake -B build -G Xcode \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DGGML_COREML=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
+
+      - name: Package whisper-cli (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/Release/whisper-cli dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" whisper-cli
+          popd
+
+      - name: Package full build (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin/Release
+          zip -9 -r "../../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" .
+          popd
+
+      - name: Upload whisper-cli package (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-macos-metal
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
+
+      - name: Upload full package (macOS Metal)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-macos-metal
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
+
+  windows-build-openblas-vulkan:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows (OpenBLAS + Vulkan)
     strategy:
       fail-fast: false
       matrix:
@@ -315,6 +555,15 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe
           popd
 
+      - name: Package full build (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" .
+          popd
+
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
@@ -322,29 +571,30 @@ jobs:
           name: whisper-cli-windows-${{ matrix.arch }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
 
+      - name: Upload full package (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-windows-${{ matrix.arch }}
+          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
+
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build, macos-build, windows-build]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-openblas-vulkan-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Ubuntu package
+      - name: Download whisper-cli packages
         uses: actions/download-artifact@v4
         with:
-          pattern: whisper-cli-ubuntu-*
+          pattern: whisper-cli-*
           path: release
           merge-multiple: true
 
-      - name: Download macOS package
+      - name: Download full packages
         uses: actions/download-artifact@v4
         with:
-          name: whisper-cli-macos
-          path: release
-
-      - name: Download Windows package
-        uses: actions/download-artifact@v4
-        with:
-          pattern: whisper-cli-windows-*
+          pattern: full-*
           path: release
           merge-multiple: true
 
