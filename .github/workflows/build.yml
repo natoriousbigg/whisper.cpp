@@ -682,7 +682,7 @@ jobs:
         run: choco install ninja -y
 
       - name: Setup Intel oneAPI
-        uses: intel/setup-oneapi@v2
+        uses: rscohn2/setup-oneapi@v1
         with:
           components: intel.oneapi.win.dpcpp-compiler
 
