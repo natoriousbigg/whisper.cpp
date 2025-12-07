@@ -689,14 +689,29 @@ jobs:
       - name: Install Vulkan SDK
         shell: powershell
         run: |
-          winget install --id LunarG.VulkanSDK --accept-package-agreements --accept-source-agreements --silent
+          $installArgs = @(
+            "install"
+            "--id" "LunarG.VulkanSDK"
+            "--exact"
+            "--source" "winget"
+            "--scope" "machine"
+            "--silent"
+            "--disable-interactivity"
+            "--accept-package-agreements"
+            "--accept-source-agreements"
+          )
+
+          winget @installArgs
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Vulkan SDK installation failed via winget"
           }
-          $sdkRoot = Get-ChildItem "C:\\VulkanSDK" | Sort-Object Name -Descending | Select-Object -First 1
-          if ($sdkRoot) {
-            "VULKAN_SDK=$($sdkRoot.FullName)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+          $sdkRoot = Get-ChildItem "C:\\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdkRoot) {
+            Write-Error "Vulkan SDK not found after installation"
           }
+
+          "VULKAN_SDK=$($sdkRoot.FullName)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure (Vulkan MSVC)
         shell: cmd
