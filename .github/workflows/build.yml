@@ -572,21 +572,21 @@ jobs:
             cp -u "$dep" build/bin/
           done
 
-      - name: Package full build (Windows ${{ matrix.arch }})
+      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: msys2 {0}
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-mingw64.zip" .
           popd
 
-      - name: Upload full package (Windows ${{ matrix.arch }})
+      - name: Upload full package (Windows ${{ matrix.arch }} Vulkan MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan-mingw64
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-mingw64.zip
 
   windows-build:
     needs: determine-tag
@@ -651,21 +651,21 @@ jobs:
             cp -u "$dep" build/bin/
           done
 
-      - name: Package full build (Windows ${{ matrix.arch }})
+      - name: Package full build (Windows ${{ matrix.arch }} MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: msys2 {0}
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-mingw64.zip" .
           popd
 
-      - name: Upload full package (Windows ${{ matrix.arch }})
+      - name: Upload full package (Windows ${{ matrix.arch }} MinGW64)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}.zip
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-mingw64
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-mingw64.zip
 
   windows-build-vulkan-msvc:
     needs: determine-tag
