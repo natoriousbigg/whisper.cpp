@@ -125,12 +125,24 @@ jobs:
             deb_arch: amd64
             triplet: x86_64-linux-gnu
             compiler_packages: ""
+            blas_package: ""
+            package_suffix: "-vulkan"
             extra_cmake: "-DWHISPER_SDL2=ON"
+          - os: ubuntu-22.04
+            arch: x64
+            deb_arch: amd64
+            triplet: x86_64-linux-gnu
+            compiler_packages: ""
+            blas_package: "libopenblas-dev"
+            package_suffix: "-openblas-vulkan"
+            extra_cmake: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
           - os: ubuntu-22.04
             arch: x86
             deb_arch: i386
             triplet: i386-linux-gnu
             compiler_packages: "gcc-i686-linux-gnu g++-i686-linux-gnu"
+            blas_package: ""
+            package_suffix: "-vulkan"
             extra_cmake: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF -DWHISPER_BUILD_EXAMPLES=OFF"
     runs-on: ${{ matrix.os }}
 
@@ -144,11 +156,16 @@ jobs:
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${{ matrix.blas_package }}" ]]; then
+            EXTRA_PACKAGES="${{ matrix.blas_package }}:${{ matrix.deb_arch }}"
+          fi
           sudo apt-get install -y build-essential cmake pkg-config \
             ${{ matrix.compiler_packages }} \
             libsdl2-dev:${{ matrix.deb_arch }} \
             libvulkan-dev:${{ matrix.deb_arch }} \
-            vulkan-sdk
+            vulkan-sdk \
+            $EXTRA_PACKAGES
 
       - name: Configure
         run: |
@@ -172,15 +189,15 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-vulkan.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip" whisper-cli
           popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-ubuntu-${{ matrix.arch }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}-vulkan.zip
+          name: whisper-cli-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip
 
   macos-build:
     needs: determine-tag
