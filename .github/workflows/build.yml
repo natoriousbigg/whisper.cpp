@@ -161,6 +161,13 @@ jobs:
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+          if [[ "${{ matrix.deb_arch }}" == "i386" ]]; then
+            sudo tee /etc/apt/sources.list.d/ubuntu-i386.list > /dev/null <<'EOF'
+deb [arch=i386] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
+deb [arch=i386] http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
+deb [arch=i386] http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
+EOF
+          fi
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
