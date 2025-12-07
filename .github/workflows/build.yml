@@ -686,9 +686,6 @@ jobs:
       - name: Install Ninja
         run: choco install ninja -y
 
-      - name: Install WinGet CLI
-        uses: microsoft/winget-cli-action@v1
-
       - name: Install Vulkan SDK
         shell: powershell
         run: |
