@@ -227,14 +227,9 @@ jobs:
           sudo dpkg -i cuda-keyring_1.0-1_all.deb
           sudo apt-get update
           
-          # Install only essential CUDA components to minimize disk usage
-          # nvcc: CUDA compiler, cudart: runtime, cublas: linear algebra, nvtx: profiling
-          sudo apt-get install -y \
-            cuda-nvcc-12-4 \
-            cuda-cudart-dev-12-4 \
-            cuda-cublas-dev-12-4 \
-            cuda-nvtx-12-4 \
-            cuda-libraries-dev-12-4
+          # Install minimal CUDA toolkit to minimize disk usage
+          # Using cuda-minimal-build metapackage which includes only build essentials
+          sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
           
           # Set CUDA environment variables
           echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
