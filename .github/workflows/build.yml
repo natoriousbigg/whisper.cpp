@@ -689,22 +689,11 @@ jobs:
       - name: Install Vulkan SDK
         shell: powershell
         run: |
-          $installerPath = Join-Path $Env:TEMP "vulkan-sdk.exe"
-          $downloadUrl = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe"
-
-          Write-Host "Downloading Vulkan SDK from $downloadUrl"
-          Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath -UseBasicParsing
-
-          if (-not (Test-Path $installerPath)) {
-            Write-Error "Vulkan SDK installer was not downloaded"
-            exit 1
-          }
-
-          Write-Host "Installing Vulkan SDK silently"
-          & $installerPath /S
+          Write-Host "Installing Vulkan SDK via Chocolatey"
+          choco install vulkan-sdk -y --no-progress
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Vulkan SDK installer exited with code $LASTEXITCODE"
+            Write-Error "Chocolatey failed to install Vulkan SDK (exit $LASTEXITCODE)"
             exit $LASTEXITCODE
           }
 
@@ -728,7 +717,7 @@ jobs:
           }
 
           if (-not $sdkRoot) {
-            Write-Error "Vulkan SDK not found after installation"
+            Write-Error "Vulkan SDK not found after Chocolatey installation"
             exit 1
           }
 
