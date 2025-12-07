@@ -290,6 +290,7 @@ jobs:
       BLAS_PACKAGE: "libopenblas-dev"
       PACKAGE_SUFFIX: "-openblas-cuda"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DGGML_CUDA=ON"
+      CUDAToolkit_ROOT: /usr/lib/nvidia-cuda-toolkit
 
     steps:
       - name: Clone
@@ -309,15 +310,19 @@ jobs:
             nvidia-cuda-toolkit \
             $EXTRA_PACKAGES
 
-          echo "CUDAToolkit_ROOT=/usr/lib/nvidia-cuda-toolkit" | tee -a "$GITHUB_ENV"
-          echo "/usr/lib/nvidia-cuda-toolkit/bin" | tee -a "$GITHUB_PATH"
+          echo "CUDAToolkit_ROOT=${CUDAToolkit_ROOT}" | tee -a "$GITHUB_ENV"
+          echo "CUDA_HOME=${CUDAToolkit_ROOT}" | tee -a "$GITHUB_ENV"
+          echo "CUDACXX=${CUDAToolkit_ROOT}/bin/nvcc" | tee -a "$GITHUB_ENV"
+          echo "/usr/bin" | tee -a "$GITHUB_PATH"
+          echo "${CUDAToolkit_ROOT}/bin" | tee -a "$GITHUB_PATH"
+          nvcc --version
 
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
           cmake -S . -B build \
-            -DCMAKE_CUDA_COMPILER=/usr/lib/nvidia-cuda-toolkit/bin/nvcc \
+            -DCUDAToolkit_ROOT=${CUDAToolkit_ROOT} \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
             -DWHISPER_BUILD_EXAMPLES=ON \
