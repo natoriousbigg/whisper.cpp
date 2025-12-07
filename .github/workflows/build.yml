@@ -170,7 +170,7 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
           popd
 
       - name: Package full build (Ubuntu)
@@ -178,7 +178,7 @@ jobs:
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
           popd
 
       - name: Upload whisper-cli package
@@ -186,14 +186,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
       - name: Upload full package (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
   ubuntu-build-openblas-vulkan-x64:
     needs: determine-tag
@@ -252,7 +252,7 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
           popd
 
       - name: Package full build (Ubuntu)
@@ -260,7 +260,7 @@ jobs:
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
           popd
 
       - name: Upload whisper-cli package
@@ -268,14 +268,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
       - name: Upload full package (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
   ubuntu-build-vulkan-x86:
     needs: determine-tag
@@ -334,7 +334,7 @@ jobs:
           mkdir -p dist
           cp build/bin/whisper-cli dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
           popd
 
       - name: Package full build (Ubuntu)
@@ -342,7 +342,7 @@ jobs:
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
           popd
 
       - name: Upload whisper-cli package
@@ -350,14 +350,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
       - name: Upload full package (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${ARCH}${PACKAGE_SUFFIX}.zip
+          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
   macos-build-coreml:
     needs: determine-tag
@@ -405,7 +405,7 @@ jobs:
         run: |
           mkdir -p dist
           pushd build/bin/Release
-          zip -9 -r "../../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" .
+          zip -9 -r "../../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" .
           popd
 
       - name: Upload whisper-cli package (macOS)
@@ -419,8 +419,8 @@ jobs:
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-macos-coreml
-          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
+          name: whisper.cpp-full-macos-coreml
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
 
   macos-build-metal:
     needs: determine-tag
@@ -468,7 +468,7 @@ jobs:
         run: |
           mkdir -p dist
           pushd build/bin/Release
-          zip -9 -r "../../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" .
+          zip -9 -r "../../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" .
           popd
 
       - name: Upload whisper-cli package (macOS Metal)
@@ -482,8 +482,8 @@ jobs:
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-macos-metal
-          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
+          name: whisper.cpp-full-macos-metal
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
 
   windows-build-openblas-vulkan:
     needs: determine-tag
@@ -545,14 +545,28 @@ jobs:
         run: |
           cmake --build build --config Release -- -j 4
 
+      - name: Bundle runtime DLLs (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          exe_path="build/bin/whisper-cli.exe"
+          target_bin="${MINGW_PREFIX:-/mingw64}/bin"
+
+          deps=$(ldd "$exe_path" | awk '/=>/ { print $3 }' | grep "^${target_bin}/" | sort -u || true)
+          for dep in $deps; do
+            cp -u "$dep" build/bin/
+          done
+
       - name: Package whisper-cli (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: msys2 {0}
         run: |
           mkdir -p dist
           cp build/bin/whisper-cli.exe dist/
+          shopt -s nullglob
+          cp build/bin/*.dll dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe *.dll
           popd
 
       - name: Package full build (Windows ${{ matrix.arch }})
@@ -561,7 +575,7 @@ jobs:
         run: |
           mkdir -p dist
           pushd build/bin
-          zip -9 -r "../../dist/full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" .
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" .
           popd
 
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }})
@@ -575,8 +589,8 @@ jobs:
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: full-windows-${{ matrix.arch }}
-          path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
+          name: whisper.cpp-full-windows-${{ matrix.arch }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -594,7 +608,7 @@ jobs:
       - name: Download full packages
         uses: actions/download-artifact@v4
         with:
-          pattern: full-*
+          pattern: whisper.cpp-full-*
           path: release
           merge-multiple: true
 
