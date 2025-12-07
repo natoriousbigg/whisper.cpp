@@ -277,6 +277,84 @@ jobs:
           name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
+  ubuntu-build-openblas-cuda-x64:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Ubuntu x64 (CUDA + OpenBLAS)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      COMPILER_PACKAGES: ""
+      BLAS_PACKAGE: "libopenblas-dev"
+      PACKAGE_SUFFIX: "-openblas-cuda"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DGGML_CUDA=ON"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
+          fi
+          sudo apt-get install -y build-essential cmake pkg-config \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            nvidia-cuda-toolkit \
+            $EXTRA_PACKAGES
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          cmake -S . -B build \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            ${EXTRA_CMAKE}
+
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+
+      - name: Package whisper-cli (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli dist/
+          pushd dist
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
+          popd
+
+      - name: Package full build (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          pushd build/bin
+          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
+          popd
+
+      - name: Upload whisper-cli package
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
+      - name: Upload full package (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
   ubuntu-build-vulkan-x86:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
