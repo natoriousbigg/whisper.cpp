@@ -141,7 +141,7 @@ jobs:
           if [[ -n "${BLAS_PACKAGE}" ]]; then
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
-          sudo apt-get install -y build-essential cmake pkg-config \
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
@@ -152,7 +152,8 @@ jobs:
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
-          cmake -S . -B build \
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -223,7 +224,7 @@ jobs:
           if [[ -n "${BLAS_PACKAGE}" ]]; then
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
-          sudo apt-get install -y build-essential cmake pkg-config \
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
@@ -234,7 +235,8 @@ jobs:
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
-          cmake -S . -B build \
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -305,7 +307,7 @@ jobs:
           if [[ -n "${BLAS_PACKAGE}" ]]; then
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
-          sudo apt-get install -y build-essential cmake pkg-config \
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
@@ -316,7 +318,8 @@ jobs:
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
-          cmake -S . -B build \
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
             -DGGML_VULKAN=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
