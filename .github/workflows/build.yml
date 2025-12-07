@@ -309,11 +309,15 @@ jobs:
             nvidia-cuda-toolkit \
             $EXTRA_PACKAGES
 
+          echo "CUDAToolkit_ROOT=/usr/lib/nvidia-cuda-toolkit" | tee -a "$GITHUB_ENV"
+          echo "/usr/lib/nvidia-cuda-toolkit/bin" | tee -a "$GITHUB_PATH"
+
       - name: Configure
         run: |
           git config --global --add safe.directory /workspace
           export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
           cmake -S . -B build \
+            -DCMAKE_CUDA_COMPILER=/usr/lib/nvidia-cuda-toolkit/bin/nvcc \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
             -DWHISPER_BUILD_EXAMPLES=ON \
