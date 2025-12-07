@@ -160,7 +160,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+          if [[ "${{ matrix.deb_arch }}" != "$(dpkg --print-architecture)" ]]; then
+            sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+          fi
           if [[ "${{ matrix.deb_arch }}" == "i386" ]]; then
             cat <<'EOF' | sed 's/^ *//' | sudo tee /etc/apt/sources.list.d/ubuntu-i386.list > /dev/null
             deb [arch=i386] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
