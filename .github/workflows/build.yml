@@ -812,6 +812,8 @@ jobs:
     runs-on: windows-latest
     
     env:
+      # Standard Intel oneAPI installation directory on Windows
+      # Update this path if Intel changes their default installation location
       ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
 
     steps:
@@ -826,6 +828,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
+          # Cache key includes oneAPI version - update '2024.1' when upgrading oneAPI
           key: ${{ runner.os }}-oneapi-2024.1-${{ hashFiles('.github/workflows/build.yml') }}
           restore-keys: |
             ${{ runner.os }}-oneapi-2024.1-
@@ -851,8 +854,12 @@ jobs:
           
           # Install via winget - most reliable method
           # The installation is cached, so this only runs once
-          $installCmd = "winget install --id Intel.oneAPI.BaseToolkit --accept-package-agreements --accept-source-agreements --silent --log `"$env:TEMP\oneapi_install.log`""
-          Invoke-Expression $installCmd
+          winget install `
+            --id Intel.oneAPI.BaseToolkit `
+            --accept-package-agreements `
+            --accept-source-agreements `
+            --silent `
+            --log "$env:TEMP\oneapi_install.log"
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Installation encountered issues. Check log at: $env:TEMP\oneapi_install.log"
