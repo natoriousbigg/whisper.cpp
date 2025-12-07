@@ -225,6 +225,8 @@ jobs:
         with:
           method: local
           cuda: "12.4.1"
+          # Only install essential CUDA components needed for building:
+          # nvcc: CUDA compiler, cudart: CUDA runtime, thrust: C++ template library for CUDA
           sub-packages: '["nvcc", "cudart", "thrust"]'
           use-github-cache: false
 
