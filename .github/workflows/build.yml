@@ -691,17 +691,18 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          update: true
+          update: false
           install: >-
-            base-devel
-            git
             ${{ matrix.pkg_prefix }}-toolchain
             ${{ matrix.pkg_prefix }}-cmake
             ${{ matrix.pkg_prefix }}-ninja
-            ${{ matrix.pkg_prefix }}-python
-            ${{ matrix.pkg_prefix }}-pkg-config
             ${{ matrix.pkg_prefix }}-openblas
             zip
+
+      - name: Clean MSYS2 package cache
+        shell: msys2 {0}
+        run: |
+          pacman -Scc --noconfirm || true
 
       - name: Configure
         shell: msys2 {0}
@@ -769,6 +770,13 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          Remove-Item -Path "C:\\ProgramData\\Package Cache" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "C:\\Windows\\Temp\\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:TEMP\\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Get-PSDrive C | Format-Table
+
       - name: Install CUDA toolkit
         uses: Jimver/cuda-toolkit@master
         with:
@@ -784,17 +792,18 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          update: true
+          update: false
           install: >-
-            base-devel
-            git
             ${{ matrix.pkg_prefix }}-toolchain
             ${{ matrix.pkg_prefix }}-cmake
             ${{ matrix.pkg_prefix }}-ninja
-            ${{ matrix.pkg_prefix }}-python
-            ${{ matrix.pkg_prefix }}-pkg-config
             ${{ matrix.pkg_prefix }}-openblas
             zip
+
+      - name: Clean MSYS2 package cache
+        shell: msys2 {0}
+        run: |
+          pacman -Scc --noconfirm || true
 
       - name: Configure
         shell: msys2 {0}
