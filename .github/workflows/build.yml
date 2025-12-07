@@ -689,29 +689,66 @@ jobs:
       - name: Install Vulkan SDK
         shell: powershell
         run: |
-          $installArgs = @(
+          $baseArgs = @(
             "install"
             "--id" "LunarG.VulkanSDK"
             "--exact"
             "--source" "winget"
-            "--scope" "machine"
             "--silent"
             "--disable-interactivity"
             "--accept-package-agreements"
             "--accept-source-agreements"
           )
 
-          winget @installArgs
-          if ($LASTEXITCODE -ne 0) {
+          function Install-VulkanSdk {
+            param(
+              [string]$Scope
+            )
+
+            $args = @($baseArgs)
+            if ($Scope) {
+              $args += @("--scope" , $Scope)
+            }
+
+            Write-Host "Installing Vulkan SDK with scope '$Scope' via winget"
+            winget @args
+            return $LASTEXITCODE
+          }
+
+          $exitCode = Install-VulkanSdk "machine"
+          if ($exitCode -ne 0) {
+            Write-Warning "Machine-scope Vulkan SDK install failed with exit code $exitCode; retrying with user scope"
+            $exitCode = Install-VulkanSdk "user"
+          }
+
+          if ($exitCode -ne 0) {
             Write-Error "Vulkan SDK installation failed via winget"
           }
 
-          $sdkRoot = Get-ChildItem "C:\\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          $searchRoots = @(
+            "C:\\VulkanSDK",
+            "$Env:ProgramFiles\\VulkanSDK",
+            "$Env:ProgramFiles(x86)\\VulkanSDK"
+          )
+
+          $sdkRoot = $null
+          foreach ($root in $searchRoots) {
+            if (-not (Test-Path $root)) {
+              continue
+            }
+
+            $candidate = Get-ChildItem $root -Directory | Sort-Object Name -Descending | Select-Object -First 1
+            if ($candidate) {
+              $sdkRoot = $candidate.FullName
+              break
+            }
+          }
+
           if (-not $sdkRoot) {
             Write-Error "Vulkan SDK not found after installation"
           }
 
-          "VULKAN_SDK=$($sdkRoot.FullName)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure (Vulkan MSVC)
         shell: cmd
