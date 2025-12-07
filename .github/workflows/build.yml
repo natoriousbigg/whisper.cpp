@@ -298,7 +298,7 @@ jobs:
 
       - name: Install CUDA toolkit
         id: cuda-toolkit
-        uses: Jimver/cuda-toolkit@v0
+        uses: Jimver/cuda-toolkit@master
         with:
           cuda: "12.4.1"
 
