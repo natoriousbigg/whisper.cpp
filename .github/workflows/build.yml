@@ -226,8 +226,8 @@ jobs:
           method: network
           cuda: "12.4.1"
           # Only install essential CUDA components needed for building:
-          # nvcc: CUDA compiler, cudart: CUDA runtime, cublas: CUDA linear algebra library, thrust: C++ template library
-          sub-packages: '["nvcc", "cudart", "cublas", "thrust"]'
+          # nvcc: CUDA compiler, cudart: CUDA runtime, cublas-dev: CUDA linear algebra library, thrust: C++ template library
+          sub-packages: '["nvcc", "cudart", "cublas-dev", "thrust"]'
 
       - name: Install dependencies
         run: |
