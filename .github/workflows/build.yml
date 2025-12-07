@@ -863,8 +863,11 @@ jobs:
             --log "$env:TEMP\oneapi_install.log"
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Installation encountered issues. Check log at: $env:TEMP\oneapi_install.log"
-            Write-Host "Attempting to continue anyway as partial installation may be sufficient..."
+            Write-Host "✗ Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host "Check log at: $env:TEMP\oneapi_install.log"
+            Write-Host ""
+            Write-Host "Installation failed and cannot continue."
+            exit 1
           } else {
             Write-Host "Installation completed successfully"
           }
