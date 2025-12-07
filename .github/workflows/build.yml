@@ -223,6 +223,7 @@ jobs:
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.15
         with:
+          method: network
           cuda: "12.4.1"
 
       - name: Install dependencies
