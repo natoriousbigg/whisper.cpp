@@ -810,6 +810,9 @@ jobs:
           - arch: x64
 
     runs-on: windows-latest
+    
+    env:
+      ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
 
     steps:
       - name: Clone
@@ -822,7 +825,7 @@ jobs:
         id: cache-oneapi
         uses: actions/cache@v4
         with:
-          path: C:\Program Files (x86)\Intel\oneAPI
+          path: ${{ env.ONEAPI_INSTALL_PATH }}
           key: ${{ runner.os }}-oneapi-2024.1-${{ hashFiles('.github/workflows/build.yml') }}
           restore-keys: |
             ${{ runner.os }}-oneapi-2024.1-
@@ -848,11 +851,8 @@ jobs:
           
           # Install via winget - most reliable method
           # The installation is cached, so this only runs once
-          winget install --id Intel.oneAPI.BaseToolkit `
-            --accept-package-agreements `
-            --accept-source-agreements `
-            --silent `
-            --log "$env:TEMP\oneapi_install.log"
+          $installCmd = "winget install --id Intel.oneAPI.BaseToolkit --accept-package-agreements --accept-source-agreements --silent --log `"$env:TEMP\oneapi_install.log`""
+          Invoke-Expression $installCmd
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Installation encountered issues. Check log at: $env:TEMP\oneapi_install.log"
@@ -864,12 +864,11 @@ jobs:
       - name: Set oneAPI environment variables
         shell: powershell
         run: |
-          echo "ONEAPI_ROOT=C:\\Program Files (x86)\\Intel\\oneAPI" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          echo "ONEAPI_ROOT=$env:ONEAPI_INSTALL_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
           
           # Verify installation
-          $oneAPIPath = "C:\Program Files (x86)\Intel\oneAPI"
-          if (Test-Path $oneAPIPath) {
-            Write-Host "✓ oneAPI installation verified at: $oneAPIPath"
+          if (Test-Path $env:ONEAPI_INSTALL_PATH) {
+            Write-Host "✓ oneAPI installation verified at: $env:ONEAPI_INSTALL_PATH"
           } else {
             Write-Host "⚠ Warning: oneAPI path not found, build may fail"
           }
