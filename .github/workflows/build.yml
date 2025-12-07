@@ -301,6 +301,8 @@ jobs:
         uses: Jimver/cuda-toolkit@master
         with:
           cuda: "12.4.1"
+          linux-version: ubuntu2204
+          method: network
 
       - name: Install dependencies
         run: |
@@ -315,9 +317,13 @@ jobs:
             libsdl2-dev:${DEB_ARCH} \
             $EXTRA_PACKAGES
 
-          echo "CUDA_HOME=${CUDAToolkit_ROOT}" | tee -a "$GITHUB_ENV"
-          echo "CUDACXX=${CUDAToolkit_ROOT}/bin/nvcc" | tee -a "$GITHUB_ENV"
-          echo "${CUDAToolkit_ROOT}/bin" | tee -a "$GITHUB_PATH"
+          CUDA_BASE=${CUDA_PATH:-${CUDAToolkit_ROOT}}
+          echo "CUDA_HOME=${CUDA_BASE}" | tee -a "$GITHUB_ENV"
+          echo "CUDAToolkit_ROOT=${CUDA_BASE}" | tee -a "$GITHUB_ENV"
+          echo "CUDACXX=${CUDA_BASE}/bin/nvcc" | tee -a "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${CUDA_BASE}/lib64:${LD_LIBRARY_PATH}" | tee -a "$GITHUB_ENV"
+          echo "${CUDA_BASE}/bin" | tee -a "$GITHUB_PATH"
+
           nvcc --version
 
       - name: Configure
