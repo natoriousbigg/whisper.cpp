@@ -545,14 +545,28 @@ jobs:
         run: |
           cmake --build build --config Release -- -j 4
 
+      - name: Bundle runtime DLLs (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: msys2 {0}
+        run: |
+          exe_path="build/bin/whisper-cli.exe"
+          target_bin="${MINGW_PREFIX:-/mingw64}/bin"
+
+          deps=$(ldd "$exe_path" | awk '/=>/ { print $3 }' | grep "^${target_bin}/" | sort -u || true)
+          for dep in $deps; do
+            cp -u "$dep" build/bin/
+          done
+
       - name: Package whisper-cli (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: msys2 {0}
         run: |
           mkdir -p dist
           cp build/bin/whisper-cli.exe dist/
+          shopt -s nullglob
+          cp build/bin/*.dll dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openblas-vulkan.zip" whisper-cli.exe *.dll
           popd
 
       - name: Package full build (Windows ${{ matrix.arch }})
