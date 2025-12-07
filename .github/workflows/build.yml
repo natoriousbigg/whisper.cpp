@@ -691,7 +691,7 @@ jobs:
         run: |
           winget install --id LunarG.VulkanSDK --accept-package-agreements --accept-source-agreements --silent
           if ($LASTEXITCODE -ne 0) {
-            choco install vulkan-sdk -y
+            Write-Error "Vulkan SDK installation failed via winget"
           }
           $sdkRoot = Get-ChildItem "C:\\VulkanSDK" | Sort-Object Name -Descending | Select-Object -First 1
           if ($sdkRoot) {
