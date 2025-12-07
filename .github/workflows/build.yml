@@ -116,11 +116,13 @@ jobs:
   ubuntu-build:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - name: Ubuntu x64 (Vulkan)
+            os: ubuntu-22.04
             arch: x64
             deb_arch: amd64
             triplet: x86_64-linux-gnu
@@ -128,7 +130,8 @@ jobs:
             blas_package: ""
             package_suffix: "-vulkan"
             extra_cmake: "-DWHISPER_SDL2=ON"
-          - os: ubuntu-22.04
+          - name: Ubuntu x64 (Vulkan + OpenBLAS)
+            os: ubuntu-22.04
             arch: x64
             deb_arch: amd64
             triplet: x86_64-linux-gnu
@@ -136,7 +139,8 @@ jobs:
             blas_package: "libopenblas-dev"
             package_suffix: "-openblas-vulkan"
             extra_cmake: "-DWHISPER_SDL2=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
-          - os: ubuntu-22.04
+          - name: Ubuntu x86 (Vulkan)
+            os: ubuntu-22.04
             arch: x86
             deb_arch: i386
             triplet: i386-linux-gnu
@@ -214,9 +218,10 @@ jobs:
           name: full-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}
           path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ matrix.arch }}${{ matrix.package_suffix }}.zip
 
-  macos-build:
+  macos-build-coreml:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: macOS (Metal + CoreML)
     runs-on: macos-latest
 
     steps:
@@ -279,6 +284,7 @@ jobs:
   macos-build-metal:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: macOS (Metal only)
     runs-on: macos-latest
 
     steps:
@@ -338,9 +344,10 @@ jobs:
           name: full-macos-metal
           path: dist/full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
 
-  windows-build:
+  windows-build-openblas-vulkan:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows (OpenBLAS + Vulkan)
     strategy:
       fail-fast: false
       matrix:
@@ -432,7 +439,7 @@ jobs:
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build, macos-build, macos-build-metal, windows-build]
+    needs: [determine-tag, ubuntu-build, macos-build-coreml, macos-build-metal, windows-build-openblas-vulkan]
     runs-on: ubuntu-latest
 
     steps:
