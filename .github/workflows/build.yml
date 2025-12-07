@@ -828,12 +828,23 @@ jobs:
             ${{ runner.os }}-oneapi-2024.1-
             ${{ runner.os }}-oneapi-
 
+      - name: Check oneAPI cache status
+        shell: powershell
+        run: |
+          if ("${{ steps.cache-oneapi.outputs.cache-hit }}" -eq "true") {
+            Write-Host "✓ oneAPI cache hit - using cached installation"
+            Write-Host "Installation time saved: ~20 minutes"
+          } else {
+            Write-Host "⚠ oneAPI cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 15-20 minutes"
+          }
+
       - name: Install Intel oneAPI Base Toolkit
         if: steps.cache-oneapi.outputs.cache-hit != 'true'
         shell: powershell
         run: |
           Write-Host "Installing Intel oneAPI Base Toolkit..."
-          Write-Host "Note: First-time installation will take 15-20 minutes. Subsequent runs will use cached installation."
+          Write-Host "Note: This installation will be cached for subsequent workflow runs."
           
           # Install via winget - most reliable method
           # The installation is cached, so this only runs once
@@ -854,7 +865,14 @@ jobs:
         shell: powershell
         run: |
           echo "ONEAPI_ROOT=C:\\Program Files (x86)\\Intel\\oneAPI" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "oneAPI will be cached for future workflow runs"
+          
+          # Verify installation
+          $oneAPIPath = "C:\Program Files (x86)\Intel\oneAPI"
+          if (Test-Path $oneAPIPath) {
+            Write-Host "✓ oneAPI installation verified at: $oneAPIPath"
+          } else {
+            Write-Host "⚠ Warning: oneAPI path not found, build may fail"
+          }
 
       - name: Configure (Intel GPU)
         shell: cmd
