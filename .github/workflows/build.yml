@@ -635,7 +635,7 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip *
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip *.exe *.dll
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
 
@@ -889,7 +889,7 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip *
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip *.exe *.dll
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
 
@@ -1087,7 +1087,7 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip *
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip *.exe *.dll
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
 
