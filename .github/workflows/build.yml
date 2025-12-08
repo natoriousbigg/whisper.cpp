@@ -328,7 +328,7 @@ jobs:
   ubuntu-build-oneapi-x64:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Ubuntu x64 (oneAPI)
+    name: Ubuntu x64 (IntelGPU)
     runs-on: ubuntu-22.04
     env:
       ARCH: x64
@@ -592,7 +592,7 @@ jobs:
   windows-build-vulkan-msvc:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Windows x64 (Vulkan, MSVC)
+    name: Windows x64 (Vulkan)
     strategy:
       fail-fast: false
       matrix:
@@ -746,7 +746,7 @@ jobs:
   windows-build-intelgpu:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Windows (IntelGPU)
+    name: Windows x64 (IntelGPU)
     strategy:
       fail-fast: false
       matrix:
