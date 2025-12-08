@@ -884,9 +884,6 @@ jobs:
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: powershell
         run: |
-          # Set up oneAPI environment
-          & "$env:ONEAPI_ROOT\setvars.bat"
-          
           # Create dist directory
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           
@@ -952,9 +949,6 @@ jobs:
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: powershell
         run: |
-          # Set up oneAPI environment
-          & "$env:ONEAPI_ROOT\setvars.bat"
-          
           # Copy Intel oneAPI runtime DLLs to build\bin for full package
           $dllsToCopy = @(
             'svml_dispmd.dll',
