@@ -635,7 +635,11 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip *.exe *.dll
+          $filesToZip = @(Get-ChildItem -Path *.exe)
+          if (Test-Path *.dll) {
+            $filesToZip += @(Get-ChildItem -Path *.dll)
+          }
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip $filesToZip
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
 
@@ -889,7 +893,11 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip *.exe *.dll
+          $filesToZip = @(Get-ChildItem -Path *.exe)
+          if (Test-Path *.dll) {
+            $filesToZip += @(Get-ChildItem -Path *.dll)
+          }
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip $filesToZip
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
 
@@ -1087,7 +1095,11 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip *.exe *.dll
+          $filesToZip = @(Get-ChildItem -Path *.exe)
+          if (Test-Path *.dll) {
+            $filesToZip += @(Get-ChildItem -Path *.dll)
+          }
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip $filesToZip
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
 
