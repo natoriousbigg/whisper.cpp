@@ -849,7 +849,8 @@ jobs:
             if (Test-Path $location) {
               foreach ($piDll in $piDlls) {
                 $piPath = Join-Path $location $piDll
-                if ((Test-Path $piPath) -and -not (Test-Path "dist\$piDll")) {
+                $destPath = Join-Path "dist" $piDll
+                if ((Test-Path $piPath) -and -not (Test-Path $destPath)) {
                   Copy-Item $piPath dist\
                   Write-Host "Copied $piDll from $location"
                   $piCopied++
@@ -1041,11 +1042,22 @@ jobs:
           }
           
           # Copy CUDA DLLs from CUDA_PATH\bin
+          # Only copy essential runtime DLLs to minimize package size
           if ($env:CUDA_PATH -and (Test-Path "$env:CUDA_PATH\bin")) {
-            Write-Host "Copying CUDA DLLs from: $env:CUDA_PATH\bin"
-            Get-ChildItem "$env:CUDA_PATH\bin\*.dll" | ForEach-Object {
-              Copy-Item $_.FullName dist\
-              Write-Host "Copied $($_.Name)"
+            Write-Host "Copying essential CUDA runtime DLLs from: $env:CUDA_PATH\bin"
+            $cudaDllPatterns = @('cudart*.dll', 'cublas*.dll', 'cublasLt*.dll', 'curand*.dll', 'cusparse*.dll', 'cusolver*.dll', 'cufft*.dll', 'nvrtc*.dll')
+            $copiedCount = 0
+            foreach ($pattern in $cudaDllPatterns) {
+              Get-ChildItem "$env:CUDA_PATH\bin\$pattern" -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName dist\
+                Write-Host "Copied $($_.Name)"
+                $copiedCount++
+              }
+            }
+            if ($copiedCount -eq 0) {
+              Write-Host "Warning: No CUDA DLLs found matching patterns"
+            } else {
+              Write-Host "Copied $copiedCount CUDA DLLs"
             }
           } else {
             Write-Host "Warning: CUDA_PATH not set or bin directory not found"
