@@ -1181,30 +1181,39 @@ jobs:
           # Display each package with human-readable size
           for file in *.zip; do
             if [ -f "$file" ]; then
-              size_bytes=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
-              size_mb=$(echo "scale=2; $size_bytes / 1048576" | bc)
-              
-              # Format size based on magnitude
-              if (( $(echo "$size_mb >= 1024" | bc -l) )); then
-                size_gb=$(echo "scale=2; $size_mb / 1024" | bc)
-                echo "  • $file: ${size_gb} GB"
+              # Get file size in bytes with error checking
+              if size_bytes=$(stat -c%s "$file" 2>/dev/null); then
+                # Convert to MB using awk for better portability
+                size_info=$(awk -v size="$size_bytes" 'BEGIN {
+                  mb = size / 1048576
+                  if (mb >= 1024) {
+                    gb = mb / 1024
+                    printf "%.2f GB", gb
+                  } else {
+                    printf "%.2f MB", mb
+                  }
+                }')
+                echo "  • $file: $size_info"
+                total_size=$((total_size + size_bytes))
               else
-                echo "  • $file: ${size_mb} MB"
+                echo "  • $file: Unable to determine size"
               fi
-              
-              total_size=$((total_size + size_bytes))
             fi
           done
           
           # Display total size
-          total_mb=$(echo "scale=2; $total_size / 1048576" | bc)
-          if (( $(echo "$total_mb >= 1024" | bc -l) )); then
-            total_gb=$(echo "scale=2; $total_mb / 1024" | bc)
+          if [ $total_size -gt 0 ]; then
+            total_info=$(awk -v size="$total_size" 'BEGIN {
+              mb = size / 1048576
+              if (mb >= 1024) {
+                gb = mb / 1024
+                printf "%.2f GB", gb
+              } else {
+                printf "%.2f MB", mb
+              }
+            }')
             echo "===================="
-            echo "Total: ${total_gb} GB"
-          else
-            echo "===================="
-            echo "Total: ${total_mb} MB"
+            echo "Total: $total_info"
           fi
 
       - name: Create GitHub release
