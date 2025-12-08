@@ -225,12 +225,33 @@ jobs:
       BLAS_PACKAGE: ""
       PACKAGE_SUFFIX: "-cuda"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_CUDA=ON -DGGML_VULKAN=OFF"
+      CUDA_VERSION: "12.4"
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Cache CUDA Toolkit
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/cuda-${{ env.CUDA_VERSION }}
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-
+
+      - name: Check CUDA cache status
+        run: |
+          if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
+            echo "CUDA cache hit - using cached installation"
+            echo "Installation time saved: ~5-10 minutes"
+          else
+            echo "CUDA cache miss - will install and cache for future runs"
+            echo "This will take approximately 5-10 minutes"
+          fi
+
       - name: Install CUDA Toolkit
+        if: steps.cache-cuda.outputs.cache-hit != 'true'
         run: |
           # Install CUDA repository
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
@@ -240,12 +261,12 @@ jobs:
           # Install minimal CUDA toolkit to minimize disk usage
           # Using cuda-minimal-build metapackage which includes only build essentials
           sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
-          
-          # Set CUDA environment variables
-          echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
-          echo "CUDA_PATH_V12_4=/usr/local/cuda-12.4" >> $GITHUB_ENV
-          echo "/usr/local/cuda-12.4/bin" >> $GITHUB_PATH
-          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
+
+      - name: Set CUDA environment variables
+        run: |
+          echo "CUDA_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
+          echo "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
@@ -461,11 +482,21 @@ jobs:
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
 
-  macos-build-coreml:
+  macos-build:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: macOS (Metal + CoreML)
+    name: macOS ${{ matrix.name }}
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Metal + CoreML
+            coreml: ON
+            suffix: coreml
+          - name: Metal only
+            coreml: OFF
+            suffix: metal
 
     steps:
       - name: Clone
@@ -484,7 +515,7 @@ jobs:
           cmake -B build -G Xcode \
             -DGGML_METAL_USE_BF16=ON \
             -DGGML_METAL_EMBED_LIBRARY=ON \
-            -DGGML_COREML=ON \
+            -DGGML_COREML=${{ matrix.coreml }} \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
             -DWHISPER_BUILD_EXAMPLES=ON \
@@ -493,99 +524,36 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package whisper-cli and whisper-bench (macOS)
+      - name: Package whisper-cli and whisper-bench
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
           cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" whisper-cli whisper-bench
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip" whisper-cli whisper-bench
           popd
 
-      - name: Package full build (macOS)
+      - name: Package full build
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
           pushd build/bin/Release
-          zip -9 -r "../../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" .
+          zip -9 -r "../../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip" .
           popd
 
-      - name: Upload whisper-cli package (macOS)
+      - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-macos-coreml
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
+          name: whisper-cli-macos-${{ matrix.suffix }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip
 
-      - name: Upload full package (macOS)
+      - name: Upload full package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper.cpp-full-macos-coreml
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip
-
-  macos-build-metal:
-    needs: determine-tag
-    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: macOS (Metal only)
-    runs-on: macos-latest
-
-    steps:
-      - name: Clone
-        uses: actions/checkout@v4
-
-      - name: Dependencies
-        run: |
-          brew update
-          cmake --version
-          brew install sdl2
-
-      - name: Build (Metal only)
-        run: |
-          sysctl -a
-          git config --global --add safe.directory /workspace
-          cmake -B build -G Xcode \
-            -DGGML_METAL_USE_BF16=ON \
-            -DGGML_METAL_EMBED_LIBRARY=ON \
-            -DGGML_COREML=OFF \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DGGML_STATIC=ON \
-            -DWHISPER_BUILD_EXAMPLES=ON \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_SERVER=OFF \
-            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
-
-      - name: Package whisper-cli and whisper-bench (macOS Metal)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        run: |
-          mkdir -p dist
-          cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
-          pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" whisper-cli whisper-bench
-          popd
-
-      - name: Package full build (macOS Metal)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        run: |
-          mkdir -p dist
-          pushd build/bin/Release
-          zip -9 -r "../../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" .
-          popd
-
-      - name: Upload whisper-cli package (macOS Metal)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper-cli-macos-metal
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
-
-      - name: Upload full package (macOS Metal)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-macos-metal
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
+          name: whisper.cpp-full-macos-${{ matrix.suffix }}
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip
 
 
 
@@ -888,6 +856,12 @@ jobs:
           copy build\bin\whisper-cli.exe dist\
           copy build\bin\whisper-bench.exe dist\
           copy build\bin\*.dll dist\
+          REM Copy Intel oneAPI runtime DLLs required for execution
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\svml_dispmd.dll" dist\ 2>nul || echo Warning: svml_dispmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libmmd.dll" dist\ 2>nul || echo Warning: libmmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libiomp5md.dll" dist\ 2>nul || echo Warning: libiomp5md.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\sycl7.dll" dist\ 2>nul || echo Warning: sycl7.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\pi_*.dll" dist\ 2>nul || echo Warning: pi_*.dll not found
           pushd dist
           tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
           popd
@@ -898,6 +872,12 @@ jobs:
         shell: cmd
         run: |
           call "%ONEAPI_ROOT%\setvars.bat"
+          REM Copy Intel oneAPI runtime DLLs to build\bin for full package
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\svml_dispmd.dll" build\bin\ 2>nul || echo Warning: svml_dispmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libmmd.dll" build\bin\ 2>nul || echo Warning: libmmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libiomp5md.dll" build\bin\ 2>nul || echo Warning: libiomp5md.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\sycl7.dll" build\bin\ 2>nul || echo Warning: sycl7.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\pi_*.dll" build\bin\ 2>nul || echo Warning: pi_*.dll not found
           pushd build\bin
           tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip .
           popd
@@ -1102,7 +1082,7 @@ jobs:
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-oneapi-x64, macos-build-coreml, macos-build-metal, windows-build-intelgpu, windows-build-vulkan-msvc, windows-build-cuda]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-oneapi-x64, macos-build, windows-build-intelgpu, windows-build-vulkan-msvc, windows-build-cuda]
     runs-on: ubuntu-latest
 
     steps:
