@@ -235,7 +235,7 @@ jobs:
         id: cache-cuda
         uses: actions/cache@v4
         with:
-          path: /usr/local/cuda-12.4
+          path: /usr/local/cuda-${{ env.CUDA_VERSION }}
           key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
           restore-keys: |
             ${{ runner.os }}-cuda-
@@ -264,10 +264,10 @@ jobs:
 
       - name: Set CUDA environment variables
         run: |
-          echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
-          echo "CUDA_PATH_V12_4=/usr/local/cuda-12.4" >> $GITHUB_ENV
-          echo "/usr/local/cuda-12.4/bin" >> $GITHUB_PATH
-          echo "LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
+          echo "CUDA_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
+          echo "CUDA_PATH_V12_4=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
+          echo "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
