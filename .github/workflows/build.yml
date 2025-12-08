@@ -136,14 +136,43 @@ jobs:
         id: cache-vulkan
         uses: actions/cache@v4
         with:
-          path: ~/vulkan-sdk
+          path: ${{ github.workspace }}/vulkan-sdk
           key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Check Vulkan cache status
+        run: |
+          if [ "${{ steps.cache-vulkan.outputs.cache-hit }}" == "true" ]; then
+            echo "Vulkan SDK cache hit - using cached installation"
+            echo "Installation time saved: ~2-3 minutes"
+          else
+            echo "Vulkan SDK cache miss - will install and cache for future runs"
+            echo "This will take approximately 2-3 minutes"
+          fi
+
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        run: |
+          # Download Vulkan SDK
+          mkdir -p ${{ github.workspace }}/vulkan-sdk
+          cd ${{ github.workspace }}/vulkan-sdk
+          
+          # Download the specific version of Vulkan SDK
+          wget -q https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+          
+          # Extract SDK
+          tar -xf vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+          rm vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+
+      - name: Set Vulkan environment
+        run: |
+          echo "VULKAN_SDK=${{ github.workspace }}/vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=${{ github.workspace }}/vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
+          echo "VK_LAYER_PATH=${{ github.workspace }}/vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64/etc/vulkan/explicit_layer.d" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
           EXTRA_PACKAGES=""
           if [[ -n "${BLAS_PACKAGE}" ]]; then
@@ -152,8 +181,8 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
-            libvulkan-dev:${DEB_ARCH} \
-            vulkan-sdk \
+            libvulkan1:${DEB_ARCH} \
+            libxcb1-dev libxcb-keysyms1-dev libx11-xcb-dev \
             $EXTRA_PACKAGES
 
       - name: Configure
@@ -1139,6 +1168,44 @@ jobs:
       #     pattern: whisper.cpp-full-*
       #     path: release
       #     merge-multiple: true
+
+      - name: Display package sizes
+        run: |
+          echo "📦 Package Sizes:"
+          echo "===================="
+          cd release
+          
+          # Calculate total size
+          total_size=0
+          
+          # Display each package with human-readable size
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              size_bytes=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+              size_mb=$(echo "scale=2; $size_bytes / 1048576" | bc)
+              
+              # Format size based on magnitude
+              if (( $(echo "$size_mb >= 1024" | bc -l) )); then
+                size_gb=$(echo "scale=2; $size_mb / 1024" | bc)
+                echo "  • $file: ${size_gb} GB"
+              else
+                echo "  • $file: ${size_mb} MB"
+              fi
+              
+              total_size=$((total_size + size_bytes))
+            fi
+          done
+          
+          # Display total size
+          total_mb=$(echo "scale=2; $total_size / 1048576" | bc)
+          if (( $(echo "$total_mb >= 1024" | bc -l) )); then
+            total_gb=$(echo "scale=2; $total_mb / 1024" | bc)
+            echo "===================="
+            echo "Total: ${total_gb} GB"
+          else
+            echo "===================="
+            echo "Total: ${total_mb} MB"
+          fi
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
