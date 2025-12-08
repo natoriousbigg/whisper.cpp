@@ -505,7 +505,7 @@ jobs:
       DEB_ARCH: amd64
       TRIPLET: x86_64-linux-gnu
       PACKAGE_SUFFIX: "-oneapi"
-      ONEAPI_VERSION: "2024.1"
+      ONEAPI_VERSION: "2025.3"
       ONEAPI_INSTALL_PATH: /opt/intel/oneapi
 
     steps:
@@ -975,11 +975,11 @@ jobs:
     runs-on: windows-latest
     
     env:
-      # Standard Intel oneAPI installation directory on Windows (oneAPI 2024.x)
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2025.x)
       # Update this path if Intel changes their default installation location
       ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
       # oneAPI version for cache key - update when upgrading oneAPI
-      ONEAPI_VERSION: "2024.1"
+      ONEAPI_VERSION: "2025.3"
 
     steps:
       - name: Clone
@@ -1156,7 +1156,8 @@ jobs:
             'libmmd.dll',
             'libiomp5md.dll',
             'sycl.dll',
-            'sycl7.dll'
+            'sycl7.dll',
+            'sycl8.dll'
           )
           
           foreach ($dll in $dllsToCopy) {
@@ -1166,6 +1167,36 @@ jobs:
               Write-Host "Copied $dll"
             } else {
               Write-Host "Warning: $dll not found at $sourcePath"
+            }
+          }
+          
+          # Copy MKL SYCL DLLs required for SYCL operations
+          $mklDlls = @(
+            'mkl_sycl_blas.5.dll',
+            'dnnl.dll'
+          )
+          
+          $mklLocations = @(
+            "$env:ONEAPI_ROOT\compiler\latest\bin",
+            "$env:ONEAPI_ROOT\mkl\latest\bin",
+            "$env:ONEAPI_ROOT\dnnl\latest\bin"
+          )
+          
+          foreach ($dll in $mklDlls) {
+            $found = $false
+            foreach ($location in $mklLocations) {
+              if (Test-Path $location) {
+                $dllPath = Join-Path $location $dll
+                if (Test-Path $dllPath) {
+                  Copy-Item $dllPath dist\
+                  Write-Host "Copied $dll from $location"
+                  $found = $true
+                  break
+                }
+              }
+            }
+            if (-not $found) {
+              Write-Host "Warning: $dll not found in any location"
             }
           }
           
