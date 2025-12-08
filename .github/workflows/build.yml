@@ -1055,12 +1055,14 @@ jobs:
           path: release
           merge-multiple: true
 
-      - name: Download full packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: whisper.cpp-full-*
-          path: release
-          merge-multiple: true
+      # Full packages are available as workflow artifacts but excluded from releases to reduce size
+      # Uncomment below to include full packages (with all examples) in releases
+      # - name: Download full packages
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     pattern: whisper.cpp-full-*
+      #     path: release
+      #     merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
