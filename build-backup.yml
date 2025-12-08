@@ -137,8 +137,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/vulkan-sdk
-          key: ${{ runner.os }}-vulkan-x86-${{ env.VULKAN_SDK_VERSION }}
+          key: ${{ runner.os }}-vulkan-x86-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-vulkan-x86-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-vulkan-x86-${{ env.VULKAN_SDK_VERSION }}-
             ${{ runner.os }}-vulkan-x86-
 
       - name: Install dependencies

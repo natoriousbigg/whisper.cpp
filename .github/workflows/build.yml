@@ -137,8 +137,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/vulkan-sdk
-          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-
             ${{ runner.os }}-vulkan-
 
       - name: Install dependencies
@@ -236,8 +238,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/cuda-${{ env.CUDA_VERSION }}
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
             ${{ runner.os }}-cuda-
 
       - name: Check CUDA cache status
@@ -368,8 +372,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
-          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-
             ${{ runner.os }}-oneapi-
 
       - name: Check oneAPI cache status
@@ -584,8 +590,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\VulkanSDK
-          key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
+          key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}-
             ${{ runner.os }}-vulkan-msvc-
 
       - name: Install Vulkan SDK
@@ -743,8 +751,10 @@ jobs:
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
           # Cache key includes oneAPI version only - workflow changes don't affect oneAPI installation
-          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-
             ${{ runner.os }}-oneapi-
 
       - name: Check oneAPI cache status
@@ -927,8 +937,10 @@ jobs:
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
           # Cache key includes CUDA version only - workflow changes don't affect CUDA installation
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
             ${{ runner.os }}-cuda-
 
       - name: Check CUDA cache status
