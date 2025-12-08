@@ -281,18 +281,6 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
 
-      - name: Cleanup before packaging
-        run: |
-          # Remove build artifacts except bin directory
-          find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
-          # Clean package manager caches
-          sudo apt-get clean
-          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
-          # Remove docker images if present
-          docker system prune -af || true
-          # Report disk usage
-          df -h
-
       - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
@@ -308,6 +296,12 @@ jobs:
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          rm -rf build dist
+          sudo rm -rf /var/cache/apt/archives || true
 
   ubuntu-build-oneapi-x64:
     needs: determine-tag
@@ -1071,26 +1065,40 @@ jobs:
             Copy-Item build\bin\*.dll dist\
           }
           
-          # Copy CUDA DLLs from CUDA_PATH\bin
-          # Only copy essential runtime DLLs to minimize package size
+          # Copy specific CUDA DLLs from CUDA_PATH\bin to minimize package size
           if ($env:CUDA_PATH -and (Test-Path "$env:CUDA_PATH\bin")) {
             Write-Host "Copying essential CUDA runtime DLLs from: $env:CUDA_PATH\bin"
-            $cudaDllPatterns = @('cudart*.dll', 'cublas*.dll', 'cublasLt*.dll', 'curand*.dll', 'cusparse*.dll', 'cusolver*.dll', 'cufft*.dll', 'nvrtc*.dll')
+            # Only copy the essential DLLs needed for CUDA functionality
+            $requiredDlls = @(
+              'cublas64_12.dll',
+              'cublasLt64_12.dll',
+              'cudart64_12.dll',
+              'nvblas64_12.dll',
+              'nvrtc64_120_0.dll',
+              'nvrtc-builtins64_124.dll'
+            )
+            
             $copiedCount = 0
-            foreach ($pattern in $cudaDllPatterns) {
-              Get-ChildItem "$env:CUDA_PATH\bin\$pattern" -ErrorAction SilentlyContinue | ForEach-Object {
-                Copy-Item $_.FullName dist\
-                Write-Host "Copied $($_.Name)"
+            foreach ($dll in $requiredDlls) {
+              $dllPath = Join-Path "$env:CUDA_PATH\bin" $dll
+              if (Test-Path $dllPath) {
+                Copy-Item $dllPath dist\
+                Write-Host "Copied $dll"
                 $copiedCount++
+              } else {
+                Write-Host "Warning: $dll not found at $dllPath"
               }
             }
+            
             if ($copiedCount -eq 0) {
-              Write-Host "Warning: No CUDA DLLs found matching patterns"
+              Write-Host "Error: No required CUDA DLLs found"
+              exit 1
             } else {
-              Write-Host "Copied $copiedCount CUDA DLLs"
+              Write-Host "Successfully copied $copiedCount CUDA DLLs"
             }
           } else {
-            Write-Host "Warning: CUDA_PATH not set or bin directory not found"
+            Write-Host "Error: CUDA_PATH not set or bin directory not found"
+            exit 1
           }
           
           # Create zip package
