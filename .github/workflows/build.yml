@@ -882,38 +882,130 @@ jobs:
 
       - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} IntelGPU)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: cmd
+        shell: powershell
         run: |
-          call "%ONEAPI_ROOT%\setvars.bat"
-          mkdir dist
-          copy build\bin\whisper-cli.exe dist\
-          copy build\bin\whisper-bench.exe dist\
-          copy build\bin\*.dll dist\
-          REM Copy Intel oneAPI runtime DLLs required for execution
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\svml_dispmd.dll" dist\ 2>nul || echo Warning: svml_dispmd.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\libmmd.dll" dist\ 2>nul || echo Warning: libmmd.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\libiomp5md.dll" dist\ 2>nul || echo Warning: libiomp5md.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\sycl7.dll" dist\ 2>nul || echo Warning: sycl7.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\pi_*.dll" dist\ 2>nul || echo Warning: pi_*.dll not found
-          pushd dist
+          # Set up oneAPI environment
+          & "$env:ONEAPI_ROOT\setvars.bat"
+          
+          # Create dist directory
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          
+          # Copy executables and build DLLs
+          Copy-Item build\bin\whisper-cli.exe dist\
+          Copy-Item build\bin\whisper-bench.exe dist\
+          Copy-Item build\bin\*.dll dist\
+          
+          # Copy Intel oneAPI runtime DLLs required for execution
+          $dllsToCopy = @(
+            'svml_dispmd.dll',
+            'libmmd.dll',
+            'libiomp5md.dll',
+            'sycl.dll',
+            'sycl7.dll'
+          )
+          
+          foreach ($dll in $dllsToCopy) {
+            $sourcePath = "$env:ONEAPI_ROOT\compiler\latest\bin\$dll"
+            if (Test-Path $sourcePath) {
+              Copy-Item $sourcePath dist\
+              Write-Host "Copied $dll"
+            } else {
+              Write-Host "Warning: $dll not found at $sourcePath"
+            }
+          }
+          
+          # Copy PI (Plugin Interface) DLLs - these may be in bin or bin\plugins
+          $piLocations = @(
+            "$env:ONEAPI_ROOT\compiler\latest\bin",
+            "$env:ONEAPI_ROOT\compiler\latest\bin\plugins"
+          )
+          
+          $piDlls = @('pi_level_zero.dll', 'pi_opencl.dll', 'pi_cuda.dll', 'pi_hip.dll')
+          $piCopied = 0
+          
+          foreach ($location in $piLocations) {
+            if (Test-Path $location) {
+              foreach ($piDll in $piDlls) {
+                $piPath = Join-Path $location $piDll
+                if (Test-Path $piPath) {
+                  Copy-Item $piPath dist\
+                  Write-Host "Copied $piDll from $location"
+                  $piCopied++
+                }
+              }
+            }
+          }
+          
+          if ($piCopied -eq 0) {
+            Write-Host "Warning: No PI plugin DLLs found"
+          } else {
+            Write-Host "Copied $piCopied PI plugin DLLs"
+          }
+          
+          # Create zip package
+          Push-Location dist
           tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
-          popd
-          move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
+          Pop-Location
+          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
 
       - name: Package full build (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: cmd
+        shell: powershell
         run: |
-          call "%ONEAPI_ROOT%\setvars.bat"
-          REM Copy Intel oneAPI runtime DLLs to build\bin for full package
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\svml_dispmd.dll" build\bin\ 2>nul || echo Warning: svml_dispmd.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\libmmd.dll" build\bin\ 2>nul || echo Warning: libmmd.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\libiomp5md.dll" build\bin\ 2>nul || echo Warning: libiomp5md.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\sycl7.dll" build\bin\ 2>nul || echo Warning: sycl7.dll not found
-          copy "%ONEAPI_ROOT%\compiler\latest\bin\pi_*.dll" build\bin\ 2>nul || echo Warning: pi_*.dll not found
-          pushd build\bin
+          # Set up oneAPI environment
+          & "$env:ONEAPI_ROOT\setvars.bat"
+          
+          # Copy Intel oneAPI runtime DLLs to build\bin for full package
+          $dllsToCopy = @(
+            'svml_dispmd.dll',
+            'libmmd.dll',
+            'libiomp5md.dll',
+            'sycl.dll',
+            'sycl7.dll'
+          )
+          
+          foreach ($dll in $dllsToCopy) {
+            $sourcePath = "$env:ONEAPI_ROOT\compiler\latest\bin\$dll"
+            if (Test-Path $sourcePath) {
+              Copy-Item $sourcePath build\bin\
+              Write-Host "Copied $dll"
+            } else {
+              Write-Host "Warning: $dll not found at $sourcePath"
+            }
+          }
+          
+          # Copy PI (Plugin Interface) DLLs - these may be in bin or bin\plugins
+          $piLocations = @(
+            "$env:ONEAPI_ROOT\compiler\latest\bin",
+            "$env:ONEAPI_ROOT\compiler\latest\bin\plugins"
+          )
+          
+          $piDlls = @('pi_level_zero.dll', 'pi_opencl.dll', 'pi_cuda.dll', 'pi_hip.dll')
+          $piCopied = 0
+          
+          foreach ($location in $piLocations) {
+            if (Test-Path $location) {
+              foreach ($piDll in $piDlls) {
+                $piPath = Join-Path $location $piDll
+                if (Test-Path $piPath) {
+                  Copy-Item $piPath build\bin\
+                  Write-Host "Copied $piDll from $location"
+                  $piCopied++
+                }
+              }
+            }
+          }
+          
+          if ($piCopied -eq 0) {
+            Write-Host "Warning: No PI plugin DLLs found"
+          } else {
+            Write-Host "Copied $piCopied PI plugin DLLs"
+          }
+          
+          # Create zip package
+          Push-Location build\bin
           tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip .
-          popd
+          Pop-Location
 
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} IntelGPU)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
