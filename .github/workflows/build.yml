@@ -138,8 +138,6 @@ jobs:
         with:
           path: ~/vulkan-sdk
           key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install dependencies
         run: |
@@ -237,8 +235,6 @@ jobs:
         with:
           path: /usr/local/cuda-${{ env.CUDA_VERSION }}
           key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
 
       - name: Check CUDA cache status
         run: |
@@ -369,8 +365,6 @@ jobs:
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
           key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
 
       - name: Check oneAPI cache status
         run: |
@@ -608,8 +602,6 @@ jobs:
         with:
           path: C:\VulkanSDK
           key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install Vulkan SDK
         if: steps.cache-vulkan.outputs.cache-hit != 'true'
@@ -767,8 +759,6 @@ jobs:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
           # Cache key includes oneAPI version only - cache is shared across branches
           key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
 
       - name: Check oneAPI cache status
         shell: powershell
@@ -1037,8 +1027,6 @@ jobs:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
           # Cache key includes CUDA version only - cache is shared across branches
           key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
 
       - name: Check CUDA cache status
         shell: powershell
