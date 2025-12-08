@@ -1170,6 +1170,73 @@ jobs:
           call "%ONEAPI_ROOT%\setvars.bat"
           cmake --build build --config Release -- -v
 
+      - name: Copy oneAPI DLLs
+        shell: powershell
+        run: |
+          # Copy Intel oneAPI runtime DLLs required for execution
+          # These DLLs are needed to run SYCL-compiled binaries
+          $oneapiRoot = "$env:ONEAPI_INSTALL_PATH"
+          
+          # Search for DLLs in multiple locations within oneAPI installation
+          $dllPaths = @(
+            "$oneapiRoot\compiler\latest\bin",
+            "$oneapiRoot\compiler\latest\windows\bin",
+            "$oneapiRoot\compiler\latest\windows\bin\intel64",
+            "$oneapiRoot\mkl\latest\bin",
+            "$oneapiRoot\mkl\latest\bin\intel64"
+          )
+          
+          $requiredDlls = @(
+            "sycl8.dll",
+            "sycl7.dll",
+            "pi_*.dll",
+            "dnnl.dll",
+            "mkl_sycl_blas*.dll",
+            "svml_*.dll",
+            "libmmd.dll",
+            "libiomp5md.dll"
+          )
+          
+          Write-Host "Copying oneAPI runtime DLLs to build/bin..."
+          
+          foreach ($dllPath in $dllPaths) {
+            if (Test-Path $dllPath) {
+              Write-Host "Searching in: $dllPath"
+              foreach ($dllPattern in $requiredDlls) {
+                Get-ChildItem -Path $dllPath -Filter $dllPattern -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                  Write-Host "  Copying: $($_.Name)"
+                  Copy-Item $_.FullName -Destination "build/bin" -Force
+                }
+              }
+            }
+          }
+          
+          # Verify critical DLLs are present
+          Write-Host ""
+          Write-Host "Verifying copied DLLs:"
+          $criticalDlls = @("sycl*.dll", "dnnl.dll", "mkl_sycl_blas*.dll")
+          $missingDlls = @()
+          
+          foreach ($dllPattern in $criticalDlls) {
+            $found = Get-ChildItem -Path "build/bin" -Filter $dllPattern -ErrorAction SilentlyContinue
+            if ($found) {
+              Write-Host "[OK] Found: $($found.Name -join ', ')"
+            } else {
+              Write-Host "[WARNING] Not found: $dllPattern"
+              $missingDlls += $dllPattern
+            }
+          }
+          
+          if ($missingDlls.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Warning: Some DLLs were not found. Package may not run without oneAPI installed."
+            Write-Host "Missing patterns: $($missingDlls -join ', ')"
+          } else {
+            Write-Host ""
+            Write-Host "[OK] All critical oneAPI runtime DLLs copied successfully"
+          }
+
       - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} IntelGPU)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: powershell
