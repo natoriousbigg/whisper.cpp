@@ -461,14 +461,37 @@ jobs:
         run: |
           mkdir -p dist
           cp build/bin/whisper-cli build/bin/whisper-bench dist/
+          
+          # Copy Intel oneAPI runtime libraries required for execution
+          # These libraries are needed to run SYCL-compiled binaries
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so* dist/ 2>/dev/null || echo "Warning: libsycl.so not found"
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so dist/ 2>/dev/null || echo "Warning: pi libraries not found"
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libOpenCL.so* dist/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsvml.so* dist/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libirng.so* dist/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* dist/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* dist/ 2>/dev/null || true
+          
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so*
           popd
 
       - name: Package full build (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
+          
+          # Copy Intel oneAPI runtime libraries to build/bin for full package
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so* build/bin/ 2>/dev/null || echo "Warning: libsycl.so not found"
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so build/bin/ 2>/dev/null || echo "Warning: pi libraries not found"
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libOpenCL.so* build/bin/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsvml.so* build/bin/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libirng.so* build/bin/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* build/bin/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* build/bin/ 2>/dev/null || true
+          
           pushd build/bin
           zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
           popd
