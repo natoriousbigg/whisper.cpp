@@ -225,12 +225,33 @@ jobs:
       BLAS_PACKAGE: ""
       PACKAGE_SUFFIX: "-cuda"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_CUDA=ON -DGGML_VULKAN=OFF"
+      CUDA_VERSION: "12.4"
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Cache CUDA Toolkit
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/cuda-12.4
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-
+
+      - name: Check CUDA cache status
+        run: |
+          if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
+            echo "CUDA cache hit - using cached installation"
+            echo "Installation time saved: ~5-10 minutes"
+          else
+            echo "CUDA cache miss - will install and cache for future runs"
+            echo "This will take approximately 5-10 minutes"
+          fi
+
       - name: Install CUDA Toolkit
+        if: steps.cache-cuda.outputs.cache-hit != 'true'
         run: |
           # Install CUDA repository
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
@@ -240,8 +261,9 @@ jobs:
           # Install minimal CUDA toolkit to minimize disk usage
           # Using cuda-minimal-build metapackage which includes only build essentials
           sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
-          
-          # Set CUDA environment variables
+
+      - name: Set CUDA environment variables
+        run: |
           echo "CUDA_PATH=/usr/local/cuda-12.4" >> $GITHUB_ENV
           echo "CUDA_PATH_V12_4=/usr/local/cuda-12.4" >> $GITHUB_ENV
           echo "/usr/local/cuda-12.4/bin" >> $GITHUB_PATH
