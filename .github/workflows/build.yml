@@ -137,11 +137,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/vulkan-sdk
-          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-
-            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-
-            ${{ runner.os }}-vulkan-
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install dependencies
         run: |
@@ -186,27 +182,12 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
           popd
 
-      - name: Package full build (Ubuntu)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        run: |
-          mkdir -p dist
-          pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
-          popd
-
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
-
-      - name: Upload full package (Ubuntu)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
       - name: Cleanup workspace
         if: always()
@@ -238,11 +219,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/cuda-${{ env.CUDA_VERSION }}
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
-            ${{ runner.os }}-cuda-
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
 
       - name: Check CUDA cache status
         run: |
@@ -306,9 +283,6 @@ jobs:
 
       - name: Cleanup before packaging
         run: |
-          # Remove CUDA toolkit to free up space
-          sudo rm -rf /usr/local/cuda* || true
-          sudo rm -rf /usr/local/share/nvidia || true
           # Remove build artifacts except bin directory
           find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
           # Clean package manager caches
@@ -328,27 +302,12 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
           popd
 
-      - name: Package full build (Ubuntu)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        run: |
-          mkdir -p dist
-          pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
-          popd
-
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
-
-      - name: Upload full package (Ubuntu)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
   ubuntu-build-oneapi-x64:
     needs: determine-tag
@@ -372,11 +331,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
-          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-
-            ${{ runner.os }}-oneapi-
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
 
       - name: Check oneAPI cache status
         run: |
@@ -477,38 +432,12 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so*
           popd
 
-      - name: Package full build (Ubuntu)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        run: |
-          mkdir -p dist
-          
-          # Copy Intel oneAPI runtime libraries to build/bin for full package
-          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so* build/bin/ 2>/dev/null || echo "Warning: libsycl.so not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so build/bin/ 2>/dev/null || echo "Warning: pi libraries not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libOpenCL.so* build/bin/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsvml.so* build/bin/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libirng.so* build/bin/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* build/bin/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* build/bin/ 2>/dev/null || true
-          
-          pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" .
-          popd
-
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
-
-      - name: Upload full package (Ubuntu)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
 
   macos-build:
@@ -562,27 +491,12 @@ jobs:
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip" whisper-cli whisper-bench
           popd
 
-      - name: Package full build
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        run: |
-          mkdir -p dist
-          pushd build/bin/Release
-          zip -9 -r "../../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip" .
-          popd
-
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-macos-${{ matrix.suffix }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip
-
-      - name: Upload full package
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-macos-${{ matrix.suffix }}
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip
 
 
 
@@ -599,7 +513,7 @@ jobs:
     runs-on: windows-latest
     
     env:
-      VULKAN_SDK_VERSION: "1.3.283.0"
+      VULKAN_SDK_VERSION: "1.4.328.1"
 
     steps:
       - name: Clone
@@ -613,11 +527,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\VulkanSDK
-          key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}-${{ github.ref }}-
-            ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}-
-            ${{ runner.os }}-vulkan-msvc-
+          key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install Vulkan SDK
         if: steps.cache-vulkan.outputs.cache-hit != 'true'
@@ -720,27 +630,12 @@ jobs:
           popd
           move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
 
-      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MSVC)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: cmd
-        run: |
-          pushd build\bin
-          tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip .
-          popd
-
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} Vulkan MSVC)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-vulkan-msvc
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip
-
-      - name: Upload full package (Windows ${{ matrix.arch }} Vulkan MSVC)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan-msvc
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip
 
   windows-build-intelgpu:
     needs: determine-tag
@@ -773,12 +668,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ONEAPI_INSTALL_PATH }}
-          # Cache key includes oneAPI version only - workflow changes don't affect oneAPI installation
-          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-${{ github.ref }}-
-            ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}-
-            ${{ runner.os }}-oneapi-
+          # Cache key includes oneAPI version only - cache is shared across branches
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
 
       - name: Check oneAPI cache status
         shell: powershell
@@ -945,75 +836,12 @@ jobs:
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
 
-      - name: Package full build (Windows ${{ matrix.arch }})
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: powershell
-        run: |
-          # Copy Intel oneAPI runtime DLLs to build\bin for full package
-          $dllsToCopy = @(
-            'svml_dispmd.dll',
-            'libmmd.dll',
-            'libiomp5md.dll',
-            'sycl.dll',
-            'sycl7.dll'
-          )
-          
-          foreach ($dll in $dllsToCopy) {
-            $sourcePath = "$env:ONEAPI_ROOT\compiler\latest\bin\$dll"
-            if (Test-Path $sourcePath) {
-              Copy-Item $sourcePath build\bin\
-              Write-Host "Copied $dll"
-            } else {
-              Write-Host "Warning: $dll not found at $sourcePath"
-            }
-          }
-          
-          # Copy PI (Plugin Interface) DLLs - these may be in bin or bin\plugins
-          $piLocations = @(
-            "$env:ONEAPI_ROOT\compiler\latest\bin",
-            "$env:ONEAPI_ROOT\compiler\latest\bin\plugins"
-          )
-          
-          $piDlls = @('pi_level_zero.dll', 'pi_opencl.dll', 'pi_cuda.dll', 'pi_hip.dll')
-          $piCopied = 0
-          
-          foreach ($location in $piLocations) {
-            if (Test-Path $location) {
-              foreach ($piDll in $piDlls) {
-                $piPath = Join-Path $location $piDll
-                if (Test-Path $piPath) {
-                  Copy-Item $piPath build\bin\
-                  Write-Host "Copied $piDll from $location"
-                  $piCopied++
-                }
-              }
-            }
-          }
-          
-          if ($piCopied -eq 0) {
-            Write-Host "Warning: No PI plugin DLLs found"
-          } else {
-            Write-Host "Copied $piCopied PI plugin DLLs"
-          }
-          
-          # Create zip package
-          Push-Location build\bin
-          tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip .
-          Pop-Location
-
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} IntelGPU)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-intelgpu
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip
-
-      - name: Upload full package (Windows ${{ matrix.arch }})
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-intelgpu
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip
 
   windows-build-cuda:
     needs: determine-tag
@@ -1045,12 +873,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
-          # Cache key includes CUDA version only - workflow changes don't affect CUDA installation
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.ref }}-
-            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
-            ${{ runner.os }}-cuda-
+          # Cache key includes CUDA version only - cache is shared across branches
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
 
       - name: Check CUDA cache status
         shell: powershell
@@ -1179,27 +1003,12 @@ jobs:
           popd
           move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
 
-      - name: Package full build (Windows ${{ matrix.arch }} CUDA)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: cmd
-        run: |
-          pushd build\bin
-          tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip .
-          popd
-
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} CUDA)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-cuda
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip
-
-      - name: Upload full package (Windows ${{ matrix.arch }} CUDA)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-cuda
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
