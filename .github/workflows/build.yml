@@ -1023,47 +1023,57 @@ jobs:
       - name: Set CUDA environment variables and verify installation
         shell: powershell
         run: |
-          # Set CUDA environment variables
-          echo "CUDA_PATH=$env:CUDA_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CUDA_PATH_V12_4=$env:CUDA_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          # Detect actual CUDA installation path
+          # Chocolatey installs latest version which may differ from our env var
+          $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
           
-          # Add CUDA to PATH
-          $cudaBinPath = Join-Path $env:CUDA_PATH "bin"
-          echo "$cudaBinPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          
-          # Verify essential components are present
-          $nvccPath = Join-Path $env:CUDA_PATH "bin\nvcc.exe"
-          $includeDir = Join-Path $env:CUDA_PATH "include"
-          $libDir = Join-Path $env:CUDA_PATH "lib\x64"
-          
-          $installValid = $true
-          
-          if (-not (Test-Path $env:CUDA_PATH)) {
-            Write-Host "✗ Error: CUDA installation directory not found at: $env:CUDA_PATH"
-            $installValid = $false
-          } elseif (-not (Test-Path $nvccPath)) {
-            Write-Host "✗ Error: nvcc.exe not found - CUDA installation may be incomplete"
-            $installValid = $false
-          } elseif (-not (Test-Path $includeDir)) {
-            Write-Host "✗ Error: Include directory not found - CUDA installation may be incomplete"
-            $installValid = $false
-          } elseif (-not (Test-Path $libDir)) {
-            Write-Host "✗ Error: Library directory not found - CUDA installation may be incomplete"
-            $installValid = $false
+          if (Test-Path $cudaBasePath) {
+            # Find the installed CUDA version directory
+            $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory | Where-Object { $_.Name -match '^v\d+\.\d+$' } | Sort-Object Name -Descending
+            
+            if ($installedVersions.Count -gt 0) {
+              $actualCudaPath = $installedVersions[0].FullName
+              Write-Host "Detected CUDA installation at: $actualCudaPath"
+              
+              # Set CUDA environment variables with actual path
+              echo "CUDA_PATH=$actualCudaPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+              
+              # Add CUDA to PATH
+              $cudaBinPath = Join-Path $actualCudaPath "bin"
+              echo "$cudaBinPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+              
+              # Verify essential components are present
+              $nvccPath = Join-Path $actualCudaPath "bin\nvcc.exe"
+              $includeDir = Join-Path $actualCudaPath "include"
+              $libDir = Join-Path $actualCudaPath "lib\x64"
+              
+              $installValid = $true
+              
+              if (-not (Test-Path $nvccPath)) {
+                Write-Host "Error: nvcc.exe not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } elseif (-not (Test-Path $includeDir)) {
+                Write-Host "Error: Include directory not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } elseif (-not (Test-Path $libDir)) {
+                Write-Host "Error: Library directory not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } else {
+                Write-Host "CUDA Toolkit verified at: $actualCudaPath"
+                Write-Host "Essential components found (nvcc.exe, include, lib)"
+              }
+              
+              if (-not $installValid) {
+                Write-Host ""
+                Write-Host "Installation validation failed. The build will likely fail."
+                exit 1
+              }
+            } else {
+              Write-Host "Error: No CUDA version directories found in $cudaBasePath"
+              exit 1
+            }
           } else {
-            Write-Host "✓ CUDA Toolkit verified at: $env:CUDA_PATH"
-            Write-Host "✓ Essential components found (nvcc.exe, include, lib)"
-          }
-          
-          if (-not $installValid) {
-            Write-Host ""
-            Write-Host "Installation validation failed. The build will likely fail."
-            Write-Host "This can happen if:"
-            Write-Host "  1. Installation was interrupted or incomplete"
-            Write-Host "  2. Cache was corrupted"
-            Write-Host "  3. Disk space ran out during installation"
-            Write-Host ""
-            Write-Host "To fix: Manually invalidate the cache and re-run the workflow"
+            Write-Host "Error: CUDA base directory not found at $cudaBasePath"
             exit 1
           }
 
