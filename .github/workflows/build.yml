@@ -288,6 +288,26 @@ jobs:
           echo "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin" >> $GITHUB_PATH
           echo "LD_LIBRARY_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
 
+      - name: Verify CUDA installation
+        run: |
+          if [ ! -d "/usr/local/cuda-${{ env.CUDA_VERSION }}" ]; then
+            echo "✗ Error: CUDA installation directory not found at: /usr/local/cuda-${{ env.CUDA_VERSION }}"
+            exit 1
+          fi
+          
+          if [ ! -f "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin/nvcc" ]; then
+            echo "✗ Error: nvcc not found - CUDA installation may be incomplete"
+            exit 1
+          fi
+          
+          echo "✓ CUDA installation verified at: /usr/local/cuda-${{ env.CUDA_VERSION }}"
+          
+          if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
+            echo "✓ Using cached CUDA installation"
+          else
+            echo "✓ Using freshly installed CUDA"
+          fi
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
@@ -567,6 +587,18 @@ jobs:
         with:
           path: C:\VulkanSDK
           key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Check Vulkan cache status
+        shell: powershell
+        run: |
+          $cacheHit = '${{ steps.cache-vulkan.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "Vulkan SDK cache hit - using cached installation"
+            Write-Host "Installation time saved: ~2-5 minutes"
+          } else {
+            Write-Host "Vulkan SDK cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 2-5 minutes"
+          }
 
       - name: Install Vulkan SDK
         if: steps.cache-vulkan.outputs.cache-hit != 'true'
