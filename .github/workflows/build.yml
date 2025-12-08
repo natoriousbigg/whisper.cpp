@@ -952,8 +952,8 @@ jobs:
           set "PATH=%VULKAN_SDK%\Bin;%PATH%"
           cmake -S . -B build -G "Ninja" ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_SHARED_LIBS=ON ^
-            -DGGML_STATIC=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
             -DGGML_VULKAN=ON ^
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
@@ -977,9 +977,13 @@ jobs:
           mkdir dist
           copy build\bin\whisper-cli.exe dist\
           copy build\bin\whisper-bench.exe dist\
-          copy build\bin\*.dll dist\
+          if exist build\bin\*.dll copy build\bin\*.dll dist\
           pushd dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe *.dll
+          if exist *.dll (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe *.dll
+          ) else (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe
+          )
           popd
           move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
 
@@ -1149,8 +1153,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_C_COMPILER=icx ^
             -DCMAKE_CXX_COMPILER=icx ^
-            -DBUILD_SHARED_LIBS=ON ^
-            -DGGML_STATIC=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
             -DGGML_SYCL=ON ^
             -DGGML_SYCL_F16=ON ^
             -DWHISPER_SYCL=ON ^
@@ -1173,92 +1177,25 @@ jobs:
           # Create dist directory
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           
-          # Copy executables and build DLLs
+          # Copy executables
           Copy-Item build\bin\whisper-cli.exe dist\
           Copy-Item build\bin\whisper-bench.exe dist\
-          Copy-Item build\bin\*.dll dist\
           
-          # Copy Intel oneAPI runtime DLLs required for execution
-          $dllsToCopy = @(
-            'svml_dispmd.dll',
-            'libmmd.dll',
-            'libiomp5md.dll',
-            'sycl.dll',
-            'sycl7.dll',
-            'sycl8.dll'
-          )
-          
-          foreach ($dll in $dllsToCopy) {
-            $sourcePath = "$env:ONEAPI_ROOT\compiler\latest\bin\$dll"
-            if (Test-Path $sourcePath) {
-              Copy-Item $sourcePath dist\
-              Write-Host "Copied $dll"
-            } else {
-              Write-Host "Warning: $dll not found at $sourcePath"
-            }
-          }
-          
-          # Copy MKL SYCL DLLs required for SYCL operations
-          $mklDlls = @(
-            'mkl_sycl_blas.5.dll',
-            'dnnl.dll'
-          )
-          
-          $mklLocations = @(
-            "$env:ONEAPI_ROOT\compiler\latest\bin",
-            "$env:ONEAPI_ROOT\mkl\latest\bin",
-            "$env:ONEAPI_ROOT\dnnl\latest\bin"
-          )
-          
-          foreach ($dll in $mklDlls) {
-            $found = $false
-            foreach ($location in $mklLocations) {
-              if (Test-Path $location) {
-                $dllPath = Join-Path $location $dll
-                if (Test-Path $dllPath) {
-                  Copy-Item $dllPath dist\
-                  Write-Host "Copied $dll from $location"
-                  $found = $true
-                  break
-                }
-              }
-            }
-            if (-not $found) {
-              Write-Host "Warning: $dll not found in any location"
-            }
-          }
-          
-          # Copy PI (Plugin Interface) DLLs - these may be in bin or bin\plugins
-          $piLocations = @(
-            "$env:ONEAPI_ROOT\compiler\latest\bin",
-            "$env:ONEAPI_ROOT\compiler\latest\bin\plugins"
-          )
-          
-          $piDlls = @('pi_level_zero.dll', 'pi_opencl.dll', 'pi_cuda.dll', 'pi_hip.dll')
-          $piCopied = 0
-          
-          foreach ($location in $piLocations) {
-            if (Test-Path $location) {
-              foreach ($piDll in $piDlls) {
-                $piPath = Join-Path $location $piDll
-                if (Test-Path $piPath) {
-                  Copy-Item $piPath dist\
-                  Write-Host "Copied $piDll from $location"
-                  $piCopied++
-                }
-              }
-            }
-          }
-          
-          if ($piCopied -eq 0) {
-            Write-Host "Warning: No PI plugin DLLs found"
-          } else {
-            Write-Host "Copied $piCopied PI plugin DLLs"
+          # Copy build DLLs if they exist (static build may not have any)
+          if (Test-Path "build\bin\*.dll") {
+            Copy-Item build\bin\*.dll dist\
           }
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
+          $files = Get-ChildItem -File
+          if ($files.Count -gt 2) {
+            # Has DLLs
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
+          } else {
+            # No DLLs (static build)
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe
+          }
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
 
@@ -1436,8 +1373,8 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_SHARED_LIBS=ON ^
-            -DGGML_STATIC=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
             -DGGML_CUDA=ON ^
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
@@ -1459,9 +1396,13 @@ jobs:
           mkdir dist
           copy build\bin\whisper-cli.exe dist\
           copy build\bin\whisper-bench.exe dist\
-          copy build\bin\*.dll dist\
+          if exist build\bin\*.dll copy build\bin\*.dll dist\
           pushd dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe *.dll
+          if exist *.dll (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe *.dll
+          ) else (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe
+          )
           popd
           move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
 
