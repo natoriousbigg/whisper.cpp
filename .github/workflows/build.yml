@@ -877,7 +877,9 @@ jobs:
             'mkl_tbb_thread.2.dll'
           )
           
-          # Unified Runtime and TBB DLLs (required for newer oneAPI versions)
+          # Unified Runtime and TBB DLLs (required for oneAPI 2024.x and newer)
+          # ur_win_proxy_loader.dll - Unified Runtime proxy loader for SYCL
+          # tbb12.dll - Threading Building Blocks version 12
           $urTbbDlls = @(
             'ur_win_proxy_loader.dll',
             'tbb12.dll'
@@ -1163,8 +1165,8 @@ jobs:
             exit 1
           }
           
-          # Copy nvcuda.dll from Windows System32 directory
-          # This is the NVIDIA CUDA driver library needed at runtime
+          # Copy nvcuda.dll (NVIDIA CUDA driver library)
+          # Try multiple locations: System32 (installed with GPU drivers) or CUDA toolkit
           $nvcudaLocations = @(
             "$env:SystemRoot\System32\nvcuda.dll",
             "$env:CUDA_PATH\bin\nvcuda.dll"
