@@ -660,13 +660,41 @@ jobs:
           # Copy Intel oneAPI runtime libraries required for execution
           # These libraries are needed to run SYCL-compiled binaries
           source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so* dist/ 2>/dev/null || echo "Warning: libsycl.so not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so dist/ 2>/dev/null || echo "Warning: pi libraries not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libOpenCL.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsvml.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libirng.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* dist/ 2>/dev/null || true
+          
+          # Search for libraries in multiple locations
+          ONEAPI_LIB_PATHS=(
+            "${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib"
+            "${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/linux/lib"
+            "${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/linux/lib/x64"
+          )
+          
+          # Copy SYCL runtime libraries (including libsycl.so.8 for 2025.x)
+          for lib_path in "${ONEAPI_LIB_PATHS[@]}"; do
+            if [ -d "$lib_path" ]; then
+              cp "$lib_path"/libsycl.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libpi_*.so dist/ 2>/dev/null || true
+              cp "$lib_path"/libOpenCL.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libsvml.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libirng.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libimf.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libintlc.so* dist/ 2>/dev/null || true
+            fi
+          done
+          
+          # Verify critical libraries are present
+          if ! ls dist/libsycl.so* 1> /dev/null 2>&1; then
+            echo "⚠ Warning: libsycl.so not found in package"
+            echo "Searched locations:"
+            for lib_path in "${ONEAPI_LIB_PATHS[@]}"; do
+              echo "  - $lib_path"
+              if [ -d "$lib_path" ]; then
+                echo "    Contents: $(ls "$lib_path"/libsycl* 2>/dev/null || echo 'none')"
+              fi
+            done
+          else
+            echo "✓ Found SYCL libraries:"
+            ls -lh dist/libsycl.so*
+          fi
           
           pushd dist
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so*
