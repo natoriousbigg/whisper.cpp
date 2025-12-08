@@ -157,11 +157,26 @@ jobs:
           cd ${{ github.workspace }}/vulkan-sdk
           
           # Download the specific version of Vulkan SDK
-          wget -q https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+          echo "Downloading Vulkan SDK ${{ env.VULKAN_SDK_VERSION }}..."
+          if ! wget -q --show-progress https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz; then
+            echo "Error: Failed to download Vulkan SDK"
+            exit 1
+          fi
           
           # Extract SDK
-          tar -xf vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+          echo "Extracting Vulkan SDK..."
+          if ! tar -xf vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz; then
+            echo "Error: Failed to extract Vulkan SDK"
+            exit 1
+          fi
           rm vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+          
+          # Verify extraction
+          if [ ! -d "${{ env.VULKAN_SDK_VERSION }}/x86_64" ]; then
+            echo "Error: Vulkan SDK directory structure not found after extraction"
+            exit 1
+          fi
+          echo "Vulkan SDK installation completed successfully"
 
       - name: Set Vulkan environment
         run: |
@@ -178,6 +193,7 @@ jobs:
           if [[ -n "${BLAS_PACKAGE}" ]]; then
             EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
           fi
+          # Install XCB libraries for X11/Vulkan integration with manually installed SDK
           sudo apt-get install -y build-essential cmake ninja-build pkg-config \
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
@@ -1175,46 +1191,39 @@ jobs:
           echo "===================="
           cd release
           
-          # Calculate total size
-          total_size=0
-          
           # Display each package with human-readable size
-          for file in *.zip; do
-            if [ -f "$file" ]; then
-              # Get file size in bytes with error checking
-              if size_bytes=$(stat -c%s "$file" 2>/dev/null); then
-                # Convert to MB using awk for better portability
-                size_info=$(awk -v size="$size_bytes" 'BEGIN {
-                  mb = size / 1048576
-                  if (mb >= 1024) {
-                    gb = mb / 1024
-                    printf "%.2f GB", gb
-                  } else {
-                    printf "%.2f MB", mb
-                  }
-                }')
-                echo "  • $file: $size_info"
-                total_size=$((total_size + size_bytes))
-              else
-                echo "  • $file: Unable to determine size"
-              fi
-            fi
-          done
-          
-          # Display total size
-          if [ $total_size -gt 0 ]; then
-            total_info=$(awk -v size="$total_size" 'BEGIN {
-              mb = size / 1048576
-              if (mb >= 1024) {
-                gb = mb / 1024
-                printf "%.2f GB", gb
+          # Use awk to safely handle large file sizes and avoid integer overflow
+          awk 'BEGIN {
+            total_size = 0
+            cmd = "ls -1 *.zip 2>/dev/null"
+            while ((cmd | getline file) > 0) {
+              size_cmd = "stat -c%s \"" file "\" 2>/dev/null"
+              if ((size_cmd | getline size_bytes) > 0) {
+                mb = size_bytes / 1048576
+                if (mb >= 1024) {
+                  gb = mb / 1024
+                  printf "  • %s: %.2f GB\n", file, gb
+                } else {
+                  printf "  • %s: %.2f MB\n", file, mb
+                }
+                total_size += size_bytes
               } else {
-                printf "%.2f MB", mb
+                printf "  • %s: Unable to determine size\n", file
               }
-            }')
-            echo "===================="
-            echo "Total: $total_info"
-          fi
+              close(size_cmd)
+            }
+            close(cmd)
+            
+            if (total_size > 0) {
+              total_mb = total_size / 1048576
+              if (total_mb >= 1024) {
+                total_gb = total_mb / 1024
+                printf "====================\nTotal: %.2f GB\n", total_gb
+              } else {
+                printf "====================\nTotal: %.2f MB\n", total_mb
+              }
+            }
+          }'
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
