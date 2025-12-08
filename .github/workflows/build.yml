@@ -362,7 +362,7 @@ jobs:
       ARCH: x64
       DEB_ARCH: amd64
       TRIPLET: x86_64-linux-gnu
-      PACKAGE_SUFFIX: "-oneapi"
+      PACKAGE_SUFFIX: "-intelgpu"
       ONEAPI_VERSION: "2024.1"
       ONEAPI_INSTALL_PATH: /opt/intel/oneapi
 
