@@ -810,6 +810,13 @@ jobs:
           - arch: x64
 
     runs-on: windows-latest
+    
+    env:
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2024.x)
+      # Update this path if Intel changes their default installation location
+      ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
+      # oneAPI version for cache key - update when upgrading oneAPI
+      ONEAPI_VERSION: "2024.1"
 
     steps:
       - name: Clone
@@ -818,11 +825,90 @@ jobs:
       - name: Install Ninja
         run: choco install ninja -y
 
-      - name: Download and install Intel oneAPI Base Toolkit
+      - name: Cache Intel oneAPI
+        id: cache-oneapi
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ONEAPI_INSTALL_PATH }}
+          # Cache key includes oneAPI version only - workflow changes don't affect oneAPI installation
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-oneapi-
+
+      - name: Check oneAPI cache status
         shell: powershell
         run: |
-          winget install --id Intel.oneAPI.BaseToolkit --accept-package-agreements --accept-source-agreements --silent
-          echo "ONEAPI_ROOT=C:\\Program Files (x86)\\Intel\\oneAPI" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          $cacheHit = '${{ steps.cache-oneapi.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "oneAPI cache hit - using cached installation"
+            Write-Host "Installation time saved: ~20 minutes"
+          } else {
+            Write-Host "oneAPI cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 15-20 minutes"
+          }
+
+      - name: Install Intel oneAPI Base Toolkit
+        if: steps.cache-oneapi.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Write-Host "Installing Intel oneAPI Base Toolkit..."
+          Write-Host "Note: This installation will be cached for subsequent workflow runs."
+          
+          # Install via winget - most reliable method
+          # The installation is cached, so this only runs once
+          winget install `
+            --id Intel.oneAPI.BaseToolkit `
+            --accept-package-agreements `
+            --accept-source-agreements `
+            --silent `
+            --log "$env:TEMP\oneapi_install.log"
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "✗ Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host "Check log at: $env:TEMP\oneapi_install.log"
+            Write-Host ""
+            Write-Host "Installation failed and cannot continue."
+            exit 1
+          } else {
+            Write-Host "Installation completed successfully"
+          }
+
+      - name: Set oneAPI environment variables and verify installation
+        shell: powershell
+        run: |
+          echo "ONEAPI_ROOT=$env:ONEAPI_INSTALL_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          
+          # Verify essential components are present
+          $setvarsPath = Join-Path $env:ONEAPI_INSTALL_PATH "setvars.bat"
+          $compilerPath = Join-Path $env:ONEAPI_INSTALL_PATH "compiler"
+          
+          $installValid = $true
+          
+          if (-not (Test-Path $env:ONEAPI_INSTALL_PATH)) {
+            Write-Host "✗ Error: oneAPI installation directory not found at: $env:ONEAPI_INSTALL_PATH"
+            $installValid = $false
+          } elseif (-not (Test-Path $setvarsPath)) {
+            Write-Host "✗ Error: setvars.bat not found - oneAPI installation may be incomplete"
+            $installValid = $false
+          } elseif (-not (Test-Path $compilerPath)) {
+            Write-Host "✗ Error: Compiler directory not found - oneAPI installation may be incomplete"
+            $installValid = $false
+          } else {
+            Write-Host "✓ oneAPI installation verified at: $env:ONEAPI_INSTALL_PATH"
+            Write-Host "✓ Essential components found (setvars.bat, compiler)"
+          }
+          
+          if (-not $installValid) {
+            Write-Host ""
+            Write-Host "Installation validation failed. The build will likely fail."
+            Write-Host "This can happen if:"
+            Write-Host "  1. Installation was interrupted or incomplete"
+            Write-Host "  2. Cache was corrupted"
+            Write-Host "  3. Disk space ran out during installation"
+            Write-Host ""
+            Write-Host "To fix: Manually invalidate the cache and re-run the workflow"
+            exit 1
+          }
 
       - name: Configure (Intel GPU)
         shell: cmd
@@ -866,9 +952,174 @@ jobs:
           name: whisper.cpp-full-windows-${{ matrix.arch }}-intelgpu
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip
 
+  windows-build-cuda:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows x64 (CUDA)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+
+    runs-on: windows-latest
+    
+    env:
+      # CUDA Toolkit installation directory on Windows
+      CUDA_PATH: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4
+      # CUDA version for cache key - update when upgrading CUDA
+      CUDA_VERSION: "12.4.1"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Cache CUDA Toolkit
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
+          # Cache key includes CUDA version only - workflow changes don't affect CUDA installation
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-
+
+      - name: Check CUDA cache status
+        shell: powershell
+        run: |
+          $cacheHit = '${{ steps.cache-cuda.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "CUDA cache hit - using cached installation"
+            Write-Host "Installation time saved: ~10 minutes"
+          } else {
+            Write-Host "CUDA cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 10 minutes"
+          }
+
+      - name: Install CUDA Toolkit
+        if: steps.cache-cuda.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Write-Host "Installing NVIDIA CUDA Toolkit..."
+          Write-Host "Note: This installation will be cached for subsequent workflow runs."
+          
+          # Install CUDA Toolkit via Chocolatey (better CUDA support than winget)
+          # Note: Chocolatey cuda package doesn't support patch versions (e.g., 12.4.1)
+          # Install latest CUDA 12.x available
+          choco install cuda -y --no-progress
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host ""
+            Write-Host "Installation failed and cannot continue."
+            exit 1
+          } else {
+            Write-Host "Installation completed successfully"
+          }
+
+      - name: Set CUDA environment variables and verify installation
+        shell: powershell
+        run: |
+          # Detect actual CUDA installation path
+          # Chocolatey installs latest version which may differ from our env var
+          $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
+          
+          if (Test-Path $cudaBasePath) {
+            # Find the installed CUDA version directory
+            $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory | Where-Object { $_.Name -match '^v\d+\.\d+$' } | Sort-Object Name -Descending
+            
+            if ($installedVersions.Count -gt 0) {
+              $actualCudaPath = $installedVersions[0].FullName
+              Write-Host "Detected CUDA installation at: $actualCudaPath"
+              
+              # Set CUDA environment variables with actual path
+              echo "CUDA_PATH=$actualCudaPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+              
+              # Add CUDA to PATH
+              $cudaBinPath = Join-Path $actualCudaPath "bin"
+              echo "$cudaBinPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+              
+              # Verify essential components are present
+              $nvccPath = Join-Path $actualCudaPath "bin\nvcc.exe"
+              $includeDir = Join-Path $actualCudaPath "include"
+              $libDir = Join-Path $actualCudaPath "lib\x64"
+              
+              $installValid = $true
+              
+              if (-not (Test-Path $nvccPath)) {
+                Write-Host "Error: nvcc.exe not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } elseif (-not (Test-Path $includeDir)) {
+                Write-Host "Error: Include directory not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } elseif (-not (Test-Path $libDir)) {
+                Write-Host "Error: Library directory not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } else {
+                Write-Host "CUDA Toolkit verified at: $actualCudaPath"
+                Write-Host "Essential components found (nvcc.exe, include, lib)"
+              }
+              
+              if (-not $installValid) {
+                Write-Host ""
+                Write-Host "Installation validation failed. The build will likely fail."
+                exit 1
+              }
+            } else {
+              Write-Host "Error: No CUDA version directories found in $cudaBasePath"
+              exit 1
+            }
+          } else {
+            Write-Host "Error: CUDA base directory not found at $cudaBasePath"
+            exit 1
+          }
+
+      - name: Configure (CUDA)
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
+            -DGGML_CUDA=ON ^
+            -DWHISPER_SDL2=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF ^
+            -DWHISPER_BUILD_EXAMPLES=ON ^
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build (CUDA)
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          cmake --build build --config Release -- -v
+
+      - name: Package full build (Windows ${{ matrix.arch }} CUDA)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: cmd
+        run: |
+          mkdir dist
+          pushd build\bin
+          tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip .
+          popd
+
+      - name: Upload full package (Windows ${{ matrix.arch }} CUDA)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper.cpp-full-windows-${{ matrix.arch }}-cuda
+          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip
+
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-vulkan, windows-build, windows-build-intelgpu, windows-build-vulkan-msvc]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-vulkan, windows-build, windows-build-intelgpu, windows-build-vulkan-msvc, windows-build-cuda]
     runs-on: ubuntu-latest
 
     steps:
