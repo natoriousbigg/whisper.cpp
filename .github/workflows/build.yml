@@ -877,8 +877,14 @@ jobs:
             'mkl_tbb_thread.2.dll'
           )
           
+          # Unified Runtime and TBB DLLs (required for newer oneAPI versions)
+          $urTbbDlls = @(
+            'ur_win_proxy_loader.dll',
+            'tbb12.dll'
+          )
+          
           # Combine all DLL lists
-          $dllsToCopy = $coreDlls + $syclDlls + $dnnlDlls + $mklSyclDlls
+          $dllsToCopy = $coreDlls + $syclDlls + $dnnlDlls + $mklSyclDlls + $urTbbDlls
           
           # Search multiple locations for DLLs
           $dllLocations = @(
@@ -887,7 +893,8 @@ jobs:
             "$env:ONEAPI_ROOT\dnnl\latest\bin",
             "$env:ONEAPI_ROOT\mkl\latest\bin",
             "$env:ONEAPI_ROOT\mkl\latest\redist\intel64",
-            "$env:ONEAPI_ROOT\tbb\latest\redist\intel64\vc_mt"
+            "$env:ONEAPI_ROOT\tbb\latest\redist\intel64\vc_mt",
+            "$env:ONEAPI_ROOT\tbb\latest\bin"
           )
           
           foreach ($dll in $dllsToCopy) {
@@ -1154,6 +1161,27 @@ jobs:
           } else {
             Write-Host "Error: CUDA_PATH not set or bin directory not found"
             exit 1
+          }
+          
+          # Copy nvcuda.dll from Windows System32 directory
+          # This is the NVIDIA CUDA driver library needed at runtime
+          $nvcudaLocations = @(
+            "$env:SystemRoot\System32\nvcuda.dll",
+            "$env:CUDA_PATH\bin\nvcuda.dll"
+          )
+          
+          $nvcudaCopied = $false
+          foreach ($location in $nvcudaLocations) {
+            if (Test-Path $location) {
+              Copy-Item $location dist\
+              Write-Host "Copied nvcuda.dll from $location"
+              $nvcudaCopied = $true
+              break
+            }
+          }
+          
+          if (-not $nvcudaCopied) {
+            Write-Host "Warning: nvcuda.dll not found - runtime may require NVIDIA GPU drivers installed"
           }
           
           # Create zip package
