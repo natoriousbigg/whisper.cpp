@@ -156,20 +156,23 @@ jobs:
           mkdir -p ${{ github.workspace }}/vulkan-sdk
           cd ${{ github.workspace }}/vulkan-sdk
           
+          # Set SDK filename
+          SDK_FILENAME="vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz"
+          
           # Download the specific version of Vulkan SDK
           echo "Downloading Vulkan SDK ${{ env.VULKAN_SDK_VERSION }}..."
-          if ! wget -q --show-progress https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz; then
+          if ! wget -q --show-progress "https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/${SDK_FILENAME}"; then
             echo "Error: Failed to download Vulkan SDK"
             exit 1
           fi
           
           # Extract SDK
           echo "Extracting Vulkan SDK..."
-          if ! tar -xf vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz; then
+          if ! tar -xf "${SDK_FILENAME}"; then
             echo "Error: Failed to extract Vulkan SDK"
             exit 1
           fi
-          rm vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz
+          rm "${SDK_FILENAME}"
           
           # Verify extraction
           if [ ! -d "${{ env.VULKAN_SDK_VERSION }}/x86_64" ]; then
@@ -1191,39 +1194,49 @@ jobs:
           echo "===================="
           cd release
           
+          # Check if any zip files exist
+          if ! ls *.zip >/dev/null 2>&1; then
+            echo "No package files found"
+            exit 0
+          fi
+          
           # Display each package with human-readable size
           # Use awk to safely handle large file sizes and avoid integer overflow
-          awk 'BEGIN {
-            total_size = 0
-            cmd = "ls -1 *.zip 2>/dev/null"
-            while ((cmd | getline file) > 0) {
-              size_cmd = "stat -c%s \"" file "\" 2>/dev/null"
-              if ((size_cmd | getline size_bytes) > 0) {
-                mb = size_bytes / 1048576
-                if (mb >= 1024) {
-                  gb = mb / 1024
-                  printf "  • %s: %.2f GB\n", file, gb
-                } else {
-                  printf "  • %s: %.2f MB\n", file, mb
-                }
-                total_size += size_bytes
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              size_bytes=$(stat -c %s "$file" 2>/dev/null)
+              if [ -n "$size_bytes" ]; then
+                size_info=$(awk -v size="$size_bytes" 'BEGIN {
+                  mb = size / 1048576
+                  if (mb >= 1024) {
+                    gb = mb / 1024
+                    printf "%.2f GB", gb
+                  } else {
+                    printf "%.2f MB", mb
+                  }
+                }')
+                echo "  • $file: $size_info"
+              else
+                echo "  • $file: Unable to determine size"
+              fi
+            fi
+          done
+          
+          # Calculate and display total size
+          total_size=$(find . -name "*.zip" -type f -exec stat -c %s {} + 2>/dev/null | awk '{sum += $1} END {print sum}')
+          if [ -n "$total_size" ] && [ "$total_size" -gt 0 ]; then
+            total_info=$(awk -v size="$total_size" 'BEGIN {
+              mb = size / 1048576
+              if (mb >= 1024) {
+                gb = mb / 1024
+                printf "%.2f GB", gb
               } else {
-                printf "  • %s: Unable to determine size\n", file
+                printf "%.2f MB", mb
               }
-              close(size_cmd)
-            }
-            close(cmd)
-            
-            if (total_size > 0) {
-              total_mb = total_size / 1048576
-              if (total_mb >= 1024) {
-                total_gb = total_mb / 1024
-                printf "====================\nTotal: %.2f GB\n", total_gb
-              } else {
-                printf "====================\nTotal: %.2f MB\n", total_mb
-              }
-            }
-          }'
+            }')
+            echo "===================="
+            echo "Total: $total_info"
+          fi
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
