@@ -158,18 +158,20 @@ jobs:
           sudo apt-get install -y vulkan-sdk
           
           # Cache the SDK for future runs
-          mkdir -p ~/vulkan-sdk
-          sudo cp -r /usr/share/vulkan ~/vulkan-sdk/
-          sudo cp -r /usr/include/vulkan ~/vulkan-sdk/include || true
-          sudo cp -r /usr/lib/x86_64-linux-gnu/libvulkan* ~/vulkan-sdk/lib || true
+          mkdir -p ~/vulkan-sdk/share ~/vulkan-sdk/include ~/vulkan-sdk/lib
+          sudo cp -r /usr/share/vulkan ~/vulkan-sdk/share/ || true
+          sudo cp -r /usr/include/vulkan ~/vulkan-sdk/include/ || true
+          sudo cp -r /usr/lib/x86_64-linux-gnu/libvulkan* ~/vulkan-sdk/lib/ || true
 
       - name: Set Vulkan SDK environment variables
         run: |
           if [ "${{ steps.cache-vulkan.outputs.cache-hit }}" == "true" ]; then
             echo "Restoring Vulkan SDK from cache"
-            sudo mkdir -p /usr/share/vulkan
-            sudo cp -r ~/vulkan-sdk/vulkan /usr/share/ || true
-            if [ -d ~/vulkan-sdk/include ]; then
+            sudo mkdir -p /usr/share /usr/include /usr/lib/x86_64-linux-gnu
+            if [ -d ~/vulkan-sdk/share/vulkan ]; then
+              sudo cp -r ~/vulkan-sdk/share/vulkan /usr/share/ || true
+            fi
+            if [ -d ~/vulkan-sdk/include/vulkan ]; then
               sudo cp -r ~/vulkan-sdk/include/vulkan /usr/include/ || true
             fi
             if [ -d ~/vulkan-sdk/lib ]; then
