@@ -795,22 +795,44 @@ jobs:
           }
           
           # Copy Intel oneAPI runtime DLLs required for execution
-          # Core runtime DLLs
-          $dllsToCopy = @(
+          # Core compiler runtime DLLs
+          $coreDlls = @(
             'svml_dispmd.dll',
             'libmmd.dll',
-            'libiomp5md.dll',
+            'libiomp5md.dll'
+          )
+          
+          # SYCL runtime DLLs (try multiple versions for compatibility)
+          $syclDlls = @(
             'sycl.dll',
             'sycl7.dll',
-            'sycl8.dll',
-            'dnnl.dll',
-            'mkl_sycl_blas.5.dll'
+            'sycl8.dll'
           )
+          
+          # oneDNN DLLs
+          $dnnlDlls = @(
+            'dnnl.dll',
+            'dnnld.dll'
+          )
+          
+          # MKL SYCL DLLs (essential for SYCL math operations)
+          $mklSyclDlls = @(
+            'mkl_sycl_blas.5.dll',
+            'mkl_sycl_lapack.5.dll',
+            'mkl_sycl_vm.5.dll',
+            'mkl_core.2.dll',
+            'mkl_intel_thread.2.dll',
+            'mkl_tbb_thread.2.dll'
+          )
+          
+          # Combine all DLL lists
+          $dllsToCopy = $coreDlls + $syclDlls + $dnnlDlls + $mklSyclDlls
           
           # Search multiple locations for DLLs
           $dllLocations = @(
             "$env:ONEAPI_ROOT\compiler\latest\bin",
             "$env:ONEAPI_ROOT\compiler\latest\windows\bin",
+            "$env:ONEAPI_ROOT\dnnl\latest\bin",
             "$env:ONEAPI_ROOT\mkl\latest\bin",
             "$env:ONEAPI_ROOT\mkl\latest\redist\intel64",
             "$env:ONEAPI_ROOT\tbb\latest\redist\intel64\vc_mt"
