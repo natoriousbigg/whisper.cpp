@@ -587,7 +587,7 @@ jobs:
     runs-on: windows-latest
     
     env:
-      VULKAN_SDK_VERSION: "1.3.283.0"
+      VULKAN_SDK_VERSION: "1.4.328.1"
 
     steps:
       - name: Clone
