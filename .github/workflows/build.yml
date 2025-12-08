@@ -1368,10 +1368,6 @@ jobs:
           } else {
             Write-Host "✓ Using freshly installed CUDA"
           }
-          } else {
-            Write-Host "Error: CUDA base directory not found at $cudaBasePath"
-            exit 1
-          }
 
       - name: Configure (CUDA)
         shell: cmd
