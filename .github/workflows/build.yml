@@ -298,9 +298,6 @@ jobs:
 
       - name: Cleanup before packaging
         run: |
-          # Remove CUDA toolkit to free up space
-          sudo rm -rf /usr/local/cuda* || true
-          sudo rm -rf /usr/local/share/nvidia || true
           # Remove build artifacts except bin directory
           find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
           # Clean package manager caches
