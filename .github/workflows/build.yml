@@ -281,18 +281,6 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
 
-      - name: Cleanup before packaging
-        run: |
-          # Remove build artifacts except bin directory
-          find build -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
-          # Clean package manager caches
-          sudo apt-get clean
-          sudo rm -rf /var/cache/apt/archives /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
-          # Remove docker images if present
-          docker system prune -af || true
-          # Report disk usage
-          df -h
-
       - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
@@ -308,6 +296,12 @@ jobs:
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          rm -rf build dist
+          sudo rm -rf /var/cache/apt/archives || true
 
   ubuntu-build-oneapi-x64:
     needs: determine-tag
