@@ -856,6 +856,12 @@ jobs:
           copy build\bin\whisper-cli.exe dist\
           copy build\bin\whisper-bench.exe dist\
           copy build\bin\*.dll dist\
+          REM Copy Intel oneAPI runtime DLLs required for execution
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\svml_dispmd.dll" dist\ 2>nul || echo Warning: svml_dispmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libmmd.dll" dist\ 2>nul || echo Warning: libmmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libiomp5md.dll" dist\ 2>nul || echo Warning: libiomp5md.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\sycl7.dll" dist\ 2>nul || echo Warning: sycl7.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\pi_*.dll" dist\ 2>nul || echo Warning: pi_*.dll not found
           pushd dist
           tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
           popd
@@ -866,6 +872,12 @@ jobs:
         shell: cmd
         run: |
           call "%ONEAPI_ROOT%\setvars.bat"
+          REM Copy Intel oneAPI runtime DLLs to build\bin for full package
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\svml_dispmd.dll" build\bin\ 2>nul || echo Warning: svml_dispmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libmmd.dll" build\bin\ 2>nul || echo Warning: libmmd.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\libiomp5md.dll" build\bin\ 2>nul || echo Warning: libiomp5md.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\sycl7.dll" build\bin\ 2>nul || echo Warning: sycl7.dll not found
+          copy "%ONEAPI_ROOT%\compiler\latest\bin\pi_*.dll" build\bin\ 2>nul || echo Warning: pi_*.dll not found
           pushd build\bin
           tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip .
           popd
