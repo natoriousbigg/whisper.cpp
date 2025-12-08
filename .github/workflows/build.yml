@@ -546,7 +546,7 @@ jobs:
 
 
 
-  windows-build-vulkan-msvc:
+  windows-build-vulkan:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
     name: Windows x64 (Vulkan)
@@ -573,7 +573,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\VulkanSDK
-          key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Install Vulkan SDK
         if: steps.cache-vulkan.outputs.cache-hit != 'true'
@@ -635,7 +635,7 @@ jobs:
 
           "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Configure (Vulkan MSVC)
+      - name: Configure (Vulkan)
         shell: cmd
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
@@ -654,7 +654,7 @@ jobs:
             -DWHISPER_BUILD_EXAMPLES=ON ^
             -DWHISPER_BUILD_SERVER=OFF
 
-      - name: Build (Vulkan MSVC)
+      - name: Build (Vulkan)
         shell: cmd
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
@@ -664,7 +664,7 @@ jobs:
           set "PATH=%VULKAN_SDK%\Bin;%PATH%"
           cmake --build build --config Release -- -v
 
-      - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} Vulkan MSVC)
+      - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} Vulkan)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: powershell
         run: |
@@ -686,16 +686,16 @@ jobs:
           if (Test-Path "*.dll") {
             $filesToZip += @(Get-ChildItem -Path "*.dll" -Name)
           }
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip $filesToZip
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip $filesToZip
           Pop-Location
-          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
+          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip dist\
 
-      - name: Upload whisper-cli package (Windows ${{ matrix.arch }} Vulkan MSVC)
+      - name: Upload whisper-cli package (Windows ${{ matrix.arch }} Vulkan)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: whisper-cli-windows-${{ matrix.arch }}-vulkan-msvc
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip
+          name: whisper-cli-windows-${{ matrix.arch }}-vulkan
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip
 
   windows-build-intelgpu:
     needs: determine-tag
@@ -1175,7 +1175,7 @@ jobs:
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-oneapi-x64, macos-build, windows-build-intelgpu, windows-build-vulkan-msvc, windows-build-cuda]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-oneapi-x64, macos-build, windows-build-intelgpu, windows-build-vulkan, windows-build-cuda]
     runs-on: ubuntu-latest
 
     steps:
