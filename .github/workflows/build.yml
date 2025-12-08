@@ -1007,10 +1007,12 @@ jobs:
           Write-Host "Note: This installation will be cached for subsequent workflow runs."
           
           # Install CUDA Toolkit via Chocolatey (better CUDA support than winget)
-          choco install cuda --version=${{ env.CUDA_VERSION }} -y --no-progress
+          # Note: Chocolatey cuda package doesn't support patch versions (e.g., 12.4.1)
+          # Install latest CUDA 12.x available
+          choco install cuda -y --no-progress
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "✗ Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host "Error: Installation failed with exit code $LASTEXITCODE"
             Write-Host ""
             Write-Host "Installation failed and cannot continue."
             exit 1
