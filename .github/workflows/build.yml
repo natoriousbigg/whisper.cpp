@@ -126,10 +126,20 @@ jobs:
       BLAS_PACKAGE: ""
       PACKAGE_SUFFIX: "-vulkan"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON"
+      VULKAN_SDK_VERSION: "1.3.283.0"
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
+
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v4
+        with:
+          path: ~/vulkan-sdk
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-vulkan-
 
       - name: Install dependencies
         run: |
@@ -165,13 +175,13 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
 
-      - name: Package whisper-cli (Ubuntu)
+      - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
-          cp build/bin/whisper-cli dist/
+          cp build/bin/whisper-cli build/bin/whisper-bench dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
           popd
 
       - name: Package full build (Ubuntu)
@@ -284,13 +294,13 @@ jobs:
           # Report disk usage
           df -h
 
-      - name: Package whisper-cli (Ubuntu)
+      - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
-          cp build/bin/whisper-cli dist/
+          cp build/bin/whisper-cli build/bin/whisper-bench dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
           popd
 
       - name: Package full build (Ubuntu)
@@ -315,65 +325,117 @@ jobs:
           name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
 
-  ubuntu-build-vulkan-x86:
+  ubuntu-build-oneapi-x64:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Ubuntu x86 (Vulkan)
+    name: Ubuntu x64 (IntelGPU)
     runs-on: ubuntu-22.04
     env:
-      ARCH: x86
-      DEB_ARCH: i386
-      TRIPLET: i386-linux-gnu
-      COMPILER_PACKAGES: "gcc-i686-linux-gnu g++-i686-linux-gnu"
-      BLAS_PACKAGE: ""
-      PACKAGE_SUFFIX: "-vulkan"
-      EXTRA_CMAKE: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86 -DCMAKE_C_COMPILER=i686-linux-gnu-gcc -DCMAKE_CXX_COMPILER=i686-linux-gnu-g++ -DWHISPER_SDL2=OFF"
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      PACKAGE_SUFFIX: "-oneapi"
+      ONEAPI_VERSION: "2024.1"
+      ONEAPI_INSTALL_PATH: /opt/intel/oneapi
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Cache Intel oneAPI
+        id: cache-oneapi
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ONEAPI_INSTALL_PATH }}
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-oneapi-
+
+      - name: Check oneAPI cache status
+        run: |
+          if [ "${{ steps.cache-oneapi.outputs.cache-hit }}" == "true" ]; then
+            echo "oneAPI cache hit - using cached installation"
+            echo "Installation time saved: ~20 minutes"
+          else
+            echo "oneAPI cache miss - will install and cache for future runs"
+            echo "This will take approximately 15-20 minutes"
+          fi
+
+      - name: Install Intel oneAPI Base Toolkit
+        if: steps.cache-oneapi.outputs.cache-hit != 'true'
+        run: |
+          echo "Installing Intel oneAPI Base Toolkit..."
+          echo "Note: This installation will be cached for subsequent workflow runs."
+          
+          # Add Intel repository
+          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          
+          # Install oneAPI Base Toolkit
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
+          
+          echo "Installation completed successfully"
+
+      - name: Set oneAPI environment variables and verify installation
+        run: |
+          if [ ! -d "${{ env.ONEAPI_INSTALL_PATH }}" ]; then
+            echo "✗ Error: oneAPI installation directory not found at: ${{ env.ONEAPI_INSTALL_PATH }}"
+            exit 1
+          fi
+          
+          if [ ! -f "${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh" ]; then
+            echo "✗ Error: setvars.sh not found - oneAPI installation may be incomplete"
+            exit 1
+          fi
+          
+          echo "✓ oneAPI installation verified at: ${{ env.ONEAPI_INSTALL_PATH }}"
+          echo "✓ Essential components found (setvars.sh)"
+          
+          # Source oneAPI environment
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          
+          # Verify compiler is available
+          which icpx || (echo "✗ Error: icpx compiler not found" && exit 1)
+          echo "✓ icpx compiler found"
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
-          EXTRA_PACKAGES=""
-          if [[ -n "${BLAS_PACKAGE}" ]]; then
-            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
-          fi
           sudo apt-get install -y build-essential cmake ninja-build pkg-config \
-            ${COMPILER_PACKAGES} \
-            libsdl2-dev:${DEB_ARCH} \
-            libvulkan-dev:${DEB_ARCH} \
-            vulkan-sdk \
-            $EXTRA_PACKAGES
+            libsdl2-dev:${DEB_ARCH}
 
-      - name: Configure
+      - name: Configure (Intel GPU)
         run: |
-          git config --global --add safe.directory /workspace
-          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_VULKAN=ON \
+            -DCMAKE_C_COMPILER=icx \
+            -DCMAKE_CXX_COMPILER=icpx \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
-            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DGGML_SYCL=ON \
+            -DGGML_SYCL_F16=ON \
+            -DWHISPER_SYCL=ON \
+            -DWHISPER_SYCL_F16=ON \
+            -DWHISPER_SDL2=OFF \
             -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_SERVER=OFF \
-            ${EXTRA_CMAKE}
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF
 
-      - name: Build
-        run: cmake --build build --config Release -j $(nproc)
+      - name: Build (Intel GPU)
+        run: |
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          cmake --build build --config Release -j $(nproc)
 
-      - name: Package whisper-cli (Ubuntu)
+      - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
-          cp build/bin/whisper-cli dist/
+          cp build/bin/whisper-cli build/bin/whisper-bench dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
           popd
 
       - name: Package full build (Ubuntu)
@@ -397,6 +459,7 @@ jobs:
         with:
           name: whisper.cpp-full-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
 
   macos-build-coreml:
     needs: determine-tag
@@ -430,13 +493,13 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package whisper-cli (macOS)
+      - name: Package whisper-cli and whisper-bench (macOS)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
-          cp build/bin/Release/whisper-cli dist/
+          cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-coreml.zip" whisper-cli whisper-bench
           popd
 
       - name: Package full build (macOS)
@@ -493,13 +556,13 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package whisper-cli (macOS Metal)
+      - name: Package whisper-cli and whisper-bench (macOS Metal)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
-          cp build/bin/Release/whisper-cli dist/
+          cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" whisper-cli
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip" whisper-cli whisper-bench
           popd
 
       - name: Package full build (macOS Metal)
@@ -524,174 +587,12 @@ jobs:
           name: whisper.cpp-full-macos-metal
           path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-metal.zip
 
-  windows-build-vulkan:
-    needs: determine-tag
-    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Windows (Vulkan)
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            msystem: MINGW64
-            pkg_prefix: mingw-w64-x86_64
 
-    runs-on: windows-latest
-
-    steps:
-      - name: Clone
-        uses: actions/checkout@v4
-
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{ matrix.msystem }}
-          update: true
-          install: >-
-            base-devel
-            git
-            ${{ matrix.pkg_prefix }}-toolchain
-            ${{ matrix.pkg_prefix }}-cmake
-            ${{ matrix.pkg_prefix }}-ninja
-            ${{ matrix.pkg_prefix }}-python
-            ${{ matrix.pkg_prefix }}-pkg-config
-            ${{ matrix.pkg_prefix }}-vulkan-headers
-            ${{ matrix.pkg_prefix }}-vulkan-loader
-            ${{ matrix.pkg_prefix }}-vulkan-devel
-            ${{ matrix.pkg_prefix }}-glslang
-            ${{ matrix.pkg_prefix }}-shaderc
-            ${{ matrix.pkg_prefix }}-spirv-tools
-            zip
-
-      - name: Configure
-        shell: msys2 {0}
-        run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DGGML_STATIC=ON \
-            -DGGML_VULKAN=ON \
-            -DWHISPER_SDL2=OFF \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_EXAMPLES=ON \
-            -DWHISPER_BUILD_SERVER=OFF
-
-      - name: Build
-        shell: msys2 {0}
-        run: |
-          cmake --build build --config Release -- -j 4
-
-      - name: Bundle runtime DLLs (Windows ${{ matrix.arch }})
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: msys2 {0}
-        run: |
-          exe_path="build/bin/whisper-cli.exe"
-          target_bin="${MINGW_PREFIX:-/mingw64}/bin"
-
-          deps=$(ldd "$exe_path" | awk '/=>/ { print $3 }' | grep "^${target_bin}/" | sort -u || true)
-          for dep in $deps; do
-            cp -u "$dep" build/bin/
-          done
-
-      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MinGW64)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: msys2 {0}
-        run: |
-          mkdir -p dist
-          pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-mingw64.zip" .
-          popd
-
-      - name: Upload full package (Windows ${{ matrix.arch }} Vulkan MinGW64)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-vulkan-mingw64
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-mingw64.zip
-
-  windows-build:
-    needs: determine-tag
-    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Windows
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            msystem: MINGW64
-            pkg_prefix: mingw-w64-x86_64
-
-    runs-on: windows-latest
-
-    steps:
-      - name: Clone
-        uses: actions/checkout@v4
-
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{ matrix.msystem }}
-          update: true
-          install: >-
-            base-devel
-            git
-            ${{ matrix.pkg_prefix }}-toolchain
-            ${{ matrix.pkg_prefix }}-cmake
-            ${{ matrix.pkg_prefix }}-ninja
-            ${{ matrix.pkg_prefix }}-python
-            ${{ matrix.pkg_prefix }}-pkg-config
-            zip
-
-      - name: Configure
-        shell: msys2 {0}
-        run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DGGML_STATIC=ON \
-            -DGGML_VULKAN=OFF \
-            -DWHISPER_SDL2=OFF \
-            -DWHISPER_BUILD_TESTS=OFF \
-            -DWHISPER_BUILD_EXAMPLES=ON \
-            -DWHISPER_BUILD_SERVER=OFF
-
-      - name: Build
-        shell: msys2 {0}
-        run: |
-          cmake --build build --config Release -- -j 4
-
-      - name: Bundle runtime DLLs (Windows ${{ matrix.arch }})
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: msys2 {0}
-        run: |
-          exe_path="build/bin/whisper-cli.exe"
-          target_bin="${MINGW_PREFIX:-/mingw64}/bin"
-
-          deps=$(ldd "$exe_path" | awk '/=>/ { print $3 }' | grep "^${target_bin}/" | sort -u || true)
-          for dep in $deps; do
-            cp -u "$dep" build/bin/
-          done
-
-      - name: Package full build (Windows ${{ matrix.arch }} MinGW64)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        shell: msys2 {0}
-        run: |
-          mkdir -p dist
-          pushd build/bin
-          zip -9 -r "../../dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-mingw64.zip" .
-          popd
-
-      - name: Upload full package (Windows ${{ matrix.arch }} MinGW64)
-        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: whisper.cpp-full-windows-${{ matrix.arch }}-mingw64
-          path: dist/whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-mingw64.zip
 
   windows-build-vulkan-msvc:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Windows x64 (Vulkan, MSVC)
+    name: Windows x64 (Vulkan)
     strategy:
       fail-fast: false
       matrix:
@@ -699,6 +600,9 @@ jobs:
           - arch: x64
 
     runs-on: windows-latest
+    
+    env:
+      VULKAN_SDK_VERSION: "1.3.283.0"
 
     steps:
       - name: Clone
@@ -707,10 +611,21 @@ jobs:
       - name: Install Ninja
         run: choco install ninja -y
 
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v4
+        with:
+          path: C:\VulkanSDK
+          key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-vulkan-msvc-
+
       - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+          Write-Host "Vulkan SDK cache miss - installing"
           Write-Host "Installing Vulkan SDK via winget"
 
           $installArgs = @(
@@ -729,6 +644,9 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Locate Vulkan SDK
+        shell: powershell
+        run: |
           $searchRoots = @(
             "C:\\VulkanSDK",
             "$Env:ProgramFiles\\VulkanSDK",
@@ -749,8 +667,15 @@ jobs:
           }
 
           if (-not $sdkRoot) {
-            Write-Error "Vulkan SDK not found after winget installation"
+            Write-Error "Vulkan SDK not found"
             exit 1
+          }
+          
+          $cacheHit = '${{ steps.cache-vulkan.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "Vulkan SDK cache hit - using cached installation at: $sdkRoot"
+          } else {
+            Write-Host "Vulkan SDK installed at: $sdkRoot"
           }
 
           "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
@@ -765,8 +690,8 @@ jobs:
           set "PATH=%VULKAN_SDK%\Bin;%PATH%"
           cmake -S . -B build -G "Ninja" ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_SHARED_LIBS=OFF ^
-            -DGGML_STATIC=ON ^
+            -DBUILD_SHARED_LIBS=ON ^
+            -DGGML_STATIC=OFF ^
             -DGGML_VULKAN=ON ^
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
@@ -783,14 +708,33 @@ jobs:
           set "PATH=%VULKAN_SDK%\Bin;%PATH%"
           cmake --build build --config Release -- -v
 
-      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MSVC)
+      - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} Vulkan MSVC)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: cmd
         run: |
           mkdir dist
+          copy build\bin\whisper-cli.exe dist\
+          copy build\bin\whisper-bench.exe dist\
+          copy build\bin\*.dll dist\
+          pushd dist
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe *.dll
+          popd
+          move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
+
+      - name: Package full build (Windows ${{ matrix.arch }} Vulkan MSVC)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: cmd
+        run: |
           pushd build\bin
           tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip .
           popd
+
+      - name: Upload whisper-cli package (Windows ${{ matrix.arch }} Vulkan MSVC)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-windows-${{ matrix.arch }}-vulkan-msvc
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip
 
       - name: Upload full package (Windows ${{ matrix.arch }} Vulkan MSVC)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -802,7 +746,7 @@ jobs:
   windows-build-intelgpu:
     needs: determine-tag
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
-    name: Windows (IntelGPU)
+    name: Windows x64 (IntelGPU)
     strategy:
       fail-fast: false
       matrix:
@@ -918,8 +862,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_C_COMPILER=icx ^
             -DCMAKE_CXX_COMPILER=icx ^
-            -DBUILD_SHARED_LIBS=OFF ^
-            -DGGML_STATIC=ON ^
+            -DBUILD_SHARED_LIBS=ON ^
+            -DGGML_STATIC=OFF ^
             -DGGML_SYCL=ON ^
             -DGGML_SYCL_F16=ON ^
             -DWHISPER_SYCL=ON ^
@@ -935,15 +879,35 @@ jobs:
           call "%ONEAPI_ROOT%\setvars.bat"
           cmake --build build --config Release -- -v
 
-      - name: Package full build (Windows ${{ matrix.arch }})
+      - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} IntelGPU)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: cmd
         run: |
           call "%ONEAPI_ROOT%\setvars.bat"
           mkdir dist
+          copy build\bin\whisper-cli.exe dist\
+          copy build\bin\whisper-bench.exe dist\
+          copy build\bin\*.dll dist\
+          pushd dist
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
+          popd
+          move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
+
+      - name: Package full build (Windows ${{ matrix.arch }})
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: cmd
+        run: |
+          call "%ONEAPI_ROOT%\setvars.bat"
           pushd build\bin
           tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip .
           popd
+
+      - name: Upload whisper-cli package (Windows ${{ matrix.arch }} IntelGPU)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-windows-${{ matrix.arch }}-intelgpu
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip
 
       - name: Upload full package (Windows ${{ matrix.arch }})
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -1085,8 +1049,8 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_SHARED_LIBS=OFF ^
-            -DGGML_STATIC=ON ^
+            -DBUILD_SHARED_LIBS=ON ^
+            -DGGML_STATIC=OFF ^
             -DGGML_CUDA=ON ^
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
@@ -1101,14 +1065,33 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake --build build --config Release -- -v
 
-      - name: Package full build (Windows ${{ matrix.arch }} CUDA)
+      - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} CUDA)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: cmd
         run: |
           mkdir dist
+          copy build\bin\whisper-cli.exe dist\
+          copy build\bin\whisper-bench.exe dist\
+          copy build\bin\*.dll dist\
+          pushd dist
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe *.dll
+          popd
+          move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
+
+      - name: Package full build (Windows ${{ matrix.arch }} CUDA)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: cmd
+        run: |
           pushd build\bin
           tar.exe -a -c -f ..\..\dist\whisper.cpp-full-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip .
           popd
+
+      - name: Upload whisper-cli package (Windows ${{ matrix.arch }} CUDA)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-windows-${{ matrix.arch }}-cuda
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip
 
       - name: Upload full package (Windows ${{ matrix.arch }} CUDA)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -1119,7 +1102,7 @@ jobs:
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
-    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-vulkan-x86, macos-build-coreml, macos-build-metal, windows-build-vulkan, windows-build, windows-build-intelgpu, windows-build-vulkan-msvc, windows-build-cuda]
+    needs: [determine-tag, ubuntu-build-vulkan-x64, ubuntu-build-cuda-x64, ubuntu-build-oneapi-x64, macos-build-coreml, macos-build-metal, windows-build-intelgpu, windows-build-vulkan-msvc, windows-build-cuda]
     runs-on: ubuntu-latest
 
     steps:
@@ -1130,12 +1113,14 @@ jobs:
           path: release
           merge-multiple: true
 
-      - name: Download full packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: whisper.cpp-full-*
-          path: release
-          merge-multiple: true
+      # Full packages are available as workflow artifacts but excluded from releases to reduce size
+      # Uncomment below to include full packages (with all examples) in releases
+      # - name: Download full packages
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     pattern: whisper.cpp-full-*
+      #     path: release
+      #     merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
