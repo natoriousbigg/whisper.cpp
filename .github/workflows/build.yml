@@ -635,9 +635,9 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path *.exe)
-          if (Test-Path *.dll) {
-            $filesToZip += @(Get-ChildItem -Path *.dll)
+          $filesToZip = @(Get-ChildItem -Path "*.exe")
+          if (Test-Path "*.dll") {
+            $filesToZip += @(Get-ChildItem -Path "*.dll")
           }
           tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip $filesToZip
           Pop-Location
@@ -893,9 +893,9 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path *.exe)
-          if (Test-Path *.dll) {
-            $filesToZip += @(Get-ChildItem -Path *.dll)
+          $filesToZip = @(Get-ChildItem -Path "*.exe")
+          if (Test-Path "*.dll") {
+            $filesToZip += @(Get-ChildItem -Path "*.dll")
           }
           tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip $filesToZip
           Pop-Location
@@ -1095,9 +1095,9 @@ jobs:
           
           # Create zip package
           Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path *.exe)
-          if (Test-Path *.dll) {
-            $filesToZip += @(Get-ChildItem -Path *.dll)
+          $filesToZip = @(Get-ChildItem -Path "*.exe")
+          if (Test-Path "*.dll") {
+            $filesToZip += @(Get-ChildItem -Path "*.dll")
           }
           tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip $filesToZip
           Pop-Location
