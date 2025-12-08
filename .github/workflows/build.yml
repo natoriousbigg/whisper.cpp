@@ -265,7 +265,6 @@ jobs:
       - name: Set CUDA environment variables
         run: |
           echo "CUDA_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
-          echo "CUDA_PATH_V12_4=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
           echo "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin" >> $GITHUB_PATH
           echo "LD_LIBRARY_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
 
