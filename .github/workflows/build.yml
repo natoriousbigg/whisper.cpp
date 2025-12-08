@@ -1121,9 +1121,9 @@ jobs:
               'cublas64_12.dll',
               'cublasLt64_12.dll',
               'cudart64_12.dll',
+              'nvrtc-builtins64_129.dll',
               'nvblas64_12.dll',
-              'nvrtc64_120_0.dll',
-              'nvrtc-builtins64_124.dll'
+              'nvrtc64_120_0.dll'
             )
             
             $copiedCount = 0
