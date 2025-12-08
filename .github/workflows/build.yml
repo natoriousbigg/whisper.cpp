@@ -1389,6 +1389,12 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake --build build --config Release -- -v
 
+      - name: Copy CUDA DLLs
+        shell: powershell
+        run: |
+          Get-ChildItem "$env:CUDA_PATH\bin\" -Filter "*.dll" |
+          Copy-Item -Destination "build/bin"
+
       - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} CUDA)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         shell: cmd
