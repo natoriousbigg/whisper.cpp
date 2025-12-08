@@ -126,7 +126,7 @@ jobs:
       BLAS_PACKAGE: ""
       PACKAGE_SUFFIX: "-vulkan"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON"
-      VULKAN_SDK_VERSION: "1.3.283.0"
+      VULKAN_SDK_VERSION: "1.4.328.1"
 
     steps:
       - name: Clone
@@ -139,11 +139,116 @@ jobs:
           path: ~/vulkan-sdk
           key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
+      - name: Check Vulkan cache status
+        run: |
+          if [ "${{ steps.cache-vulkan.outputs.cache-hit }}" == "true" ]; then
+            echo "Vulkan SDK cache hit - using cached installation"
+            echo "Installation time saved: ~2-5 minutes"
+          else
+            echo "Vulkan SDK cache miss - will install and cache for future runs"
+            echo "This will take approximately 2-5 minutes"
+          fi
+
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          echo "Installing Vulkan SDK..."
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
+          
+          # Verify installation before caching
+          if [ ! -d /usr/share/vulkan ] || [ ! -d /usr/include/vulkan ]; then
+            echo "✗ Error: Vulkan SDK installation incomplete"
+            exit 1
+          fi
+          
+          # Cache the SDK for future runs
+          echo "Caching Vulkan SDK files..."
+          mkdir -p ~/vulkan-sdk/share ~/vulkan-sdk/include ~/vulkan-sdk/lib
+          
+          # Copy with verification
+          if ! sudo cp -r /usr/share/vulkan ~/vulkan-sdk/share/ 2>/dev/null; then
+            echo "⚠ Warning: Failed to cache /usr/share/vulkan"
+          fi
+          
+          if ! sudo cp -r /usr/include/vulkan ~/vulkan-sdk/include/ 2>/dev/null; then
+            echo "⚠ Warning: Failed to cache /usr/include/vulkan"
+          fi
+          
+          if ! sudo cp -r /usr/lib/x86_64-linux-gnu/libvulkan* ~/vulkan-sdk/lib/ 2>/dev/null; then
+            echo "⚠ Warning: Failed to cache vulkan libraries"
+          fi
+          
+          # Create cache integrity marker
+          echo "${{ env.VULKAN_SDK_VERSION }}" > ~/vulkan-sdk/version.txt
+          echo "✓ Vulkan SDK installed and cached"
+
+      - name: Set Vulkan SDK environment variables
+        run: |
+          set -e
+          CACHE_VALID=false
+          
+          if [ "${{ steps.cache-vulkan.outputs.cache-hit }}" == "true" ]; then
+            echo "Validating cached Vulkan SDK..."
+            
+            # Check cache integrity
+            if [ -f ~/vulkan-sdk/version.txt ]; then
+              CACHED_VERSION=$(cat ~/vulkan-sdk/version.txt)
+              if [ "$CACHED_VERSION" == "${{ env.VULKAN_SDK_VERSION }}" ]; then
+                echo "✓ Cache version matches: $CACHED_VERSION"
+                
+                # Verify critical files exist in cache
+                if [ -d ~/vulkan-sdk/share/vulkan ] && [ -d ~/vulkan-sdk/include/vulkan ]; then
+                  echo "✓ Cache validation passed"
+                  CACHE_VALID=true
+                else
+                  echo "⚠ Warning: Cache incomplete - missing critical directories"
+                fi
+              else
+                echo "⚠ Warning: Cache version mismatch (cached: $CACHED_VERSION, expected: ${{ env.VULKAN_SDK_VERSION }})"
+              fi
+            else
+              echo "⚠ Warning: Cache integrity marker missing"
+            fi
+            
+            if [ "$CACHE_VALID" == "true" ]; then
+              echo "Restoring Vulkan SDK from cache..."
+              sudo mkdir -p /usr/share /usr/include /usr/lib/x86_64-linux-gnu
+              
+              # Restore with error checking
+              if [ -d ~/vulkan-sdk/share/vulkan ]; then
+                sudo cp -r ~/vulkan-sdk/share/vulkan /usr/share/ || echo "⚠ Warning: Failed to restore /usr/share/vulkan"
+              fi
+              
+              if [ -d ~/vulkan-sdk/include/vulkan ]; then
+                sudo cp -r ~/vulkan-sdk/include/vulkan /usr/include/ || echo "⚠ Warning: Failed to restore /usr/include/vulkan"
+              fi
+              
+              if [ -d ~/vulkan-sdk/lib ]; then
+                sudo cp ~/vulkan-sdk/lib/libvulkan* /usr/lib/x86_64-linux-gnu/ 2>/dev/null || echo "⚠ Warning: Failed to restore vulkan libraries"
+              fi
+              
+              echo "✓ Cache restored successfully"
+            else
+              echo "⚠ Cache validation failed - will rely on libvulkan-dev package"
+            fi
+          fi
+          
+          # Verify final installation state
+          if [ ! -d /usr/include/vulkan ]; then
+            echo "✗ Error: Vulkan headers not found after restoration"
+            exit 1
+          fi
+          
+          echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
+          echo "✓ Vulkan SDK configured"
+
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture ${DEB_ARCH}
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update
           EXTRA_PACKAGES=""
           if [[ -n "${BLAS_PACKAGE}" ]]; then
@@ -153,7 +258,6 @@ jobs:
             ${COMPILER_PACKAGES} \
             libsdl2-dev:${DEB_ARCH} \
             libvulkan-dev:${DEB_ARCH} \
-            vulkan-sdk \
             $EXTRA_PACKAGES
 
       - name: Configure
@@ -234,6 +338,8 @@ jobs:
       - name: Install CUDA Toolkit
         if: steps.cache-cuda.outputs.cache-hit != 'true'
         run: |
+          set -e
+          echo "Installing CUDA Toolkit..."
           # Install CUDA repository
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
           sudo dpkg -i cuda-keyring_1.0-1_all.deb
@@ -242,12 +348,92 @@ jobs:
           # Install minimal CUDA toolkit to minimize disk usage
           # Using cuda-minimal-build metapackage which includes only build essentials
           sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
+          
+          # Create cache integrity marker
+          if [ -d "/usr/local/cuda-${{ env.CUDA_VERSION }}" ]; then
+            echo "${{ env.CUDA_VERSION }}" > /usr/local/cuda-${{ env.CUDA_VERSION }}/version.txt
+            echo "✓ CUDA Toolkit installed successfully"
+          else
+            echo "✗ Error: CUDA installation directory not found"
+            exit 1
+          fi
 
       - name: Set CUDA environment variables
         run: |
           echo "CUDA_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
           echo "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin" >> $GITHUB_PATH
           echo "LD_LIBRARY_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
+
+      - name: Verify CUDA installation
+        run: |
+          set -e
+          CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          
+          echo "Verifying CUDA installation at: $CUDA_PATH"
+          
+          # Check directory exists
+          if [ ! -d "$CUDA_PATH" ]; then
+            echo "✗ Error: CUDA installation directory not found at: $CUDA_PATH"
+            exit 1
+          fi
+          
+          # Validate cache integrity if from cache
+          if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
+            echo "Validating cached CUDA installation..."
+            
+            if [ -f "$CUDA_PATH/version.txt" ]; then
+              CACHED_VERSION=$(cat "$CUDA_PATH/version.txt")
+              if [ "$CACHED_VERSION" != "${{ env.CUDA_VERSION }}" ]; then
+                echo "⚠ Warning: Cache version mismatch (cached: $CACHED_VERSION, expected: ${{ env.CUDA_VERSION }})"
+              else
+                echo "✓ Cache version matches: $CACHED_VERSION"
+              fi
+            else
+              echo "⚠ Warning: Cache integrity marker missing"
+            fi
+          fi
+          
+          # Check critical files exist
+          MISSING_FILES=false
+          
+          if [ ! -f "$CUDA_PATH/bin/nvcc" ]; then
+            echo "✗ Error: nvcc compiler not found at $CUDA_PATH/bin/nvcc"
+            MISSING_FILES=true
+          else
+            echo "✓ Found nvcc compiler"
+          fi
+          
+          if [ ! -d "$CUDA_PATH/include" ]; then
+            echo "✗ Error: CUDA headers not found at $CUDA_PATH/include"
+            MISSING_FILES=true
+          else
+            echo "✓ Found CUDA headers"
+          fi
+          
+          if [ ! -d "$CUDA_PATH/lib64" ]; then
+            echo "✗ Error: CUDA libraries not found at $CUDA_PATH/lib64"
+            MISSING_FILES=true
+          else
+            echo "✓ Found CUDA libraries"
+          fi
+          
+          if [ "$MISSING_FILES" == "true" ]; then
+            echo ""
+            echo "✗ CUDA installation is incomplete or corrupted"
+            if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
+              echo "Suggestion: Clear the cache and re-run the workflow"
+            fi
+            exit 1
+          fi
+          
+          echo ""
+          echo "✓ CUDA installation verified successfully"
+          
+          if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
+            echo "✓ Using cached CUDA installation"
+          else
+            echo "✓ Using freshly installed CUDA"
+          fi
 
       - name: Install dependencies
         run: |
@@ -319,7 +505,7 @@ jobs:
       DEB_ARCH: amd64
       TRIPLET: x86_64-linux-gnu
       PACKAGE_SUFFIX: "-oneapi"
-      ONEAPI_VERSION: "2024.1"
+      ONEAPI_VERSION: "2025.3"
       ONEAPI_INSTALL_PATH: /opt/intel/oneapi
 
     steps:
@@ -346,6 +532,7 @@ jobs:
       - name: Install Intel oneAPI Base Toolkit
         if: steps.cache-oneapi.outputs.cache-hit != 'true'
         run: |
+          set -e
           echo "Installing Intel oneAPI Base Toolkit..."
           echo "Note: This installation will be cached for subsequent workflow runs."
           
@@ -357,29 +544,82 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
           
-          echo "Installation completed successfully"
+          # Create cache integrity marker
+          if [ -d "${{ env.ONEAPI_INSTALL_PATH }}" ]; then
+            echo "${{ env.ONEAPI_VERSION }}" > ${{ env.ONEAPI_INSTALL_PATH }}/version.txt
+            echo "✓ Installation completed successfully"
+          else
+            echo "✗ Error: oneAPI installation directory not found"
+            exit 1
+          fi
 
       - name: Set oneAPI environment variables and verify installation
         run: |
-          if [ ! -d "${{ env.ONEAPI_INSTALL_PATH }}" ]; then
-            echo "✗ Error: oneAPI installation directory not found at: ${{ env.ONEAPI_INSTALL_PATH }}"
+          set -e
+          ONEAPI_PATH="${{ env.ONEAPI_INSTALL_PATH }}"
+          
+          echo "Verifying oneAPI installation at: $ONEAPI_PATH"
+          
+          # Check directory exists
+          if [ ! -d "$ONEAPI_PATH" ]; then
+            echo "✗ Error: oneAPI installation directory not found at: $ONEAPI_PATH"
             exit 1
           fi
           
-          if [ ! -f "${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh" ]; then
+          # Validate cache integrity if from cache
+          if [ "${{ steps.cache-oneapi.outputs.cache-hit }}" == "true" ]; then
+            echo "Validating cached oneAPI installation..."
+            
+            if [ -f "$ONEAPI_PATH/version.txt" ]; then
+              CACHED_VERSION=$(cat "$ONEAPI_PATH/version.txt")
+              if [ "$CACHED_VERSION" != "${{ env.ONEAPI_VERSION }}" ]; then
+                echo "⚠ Warning: Cache version mismatch (cached: $CACHED_VERSION, expected: ${{ env.ONEAPI_VERSION }})"
+              else
+                echo "✓ Cache version matches: $CACHED_VERSION"
+              fi
+            else
+              echo "⚠ Warning: Cache integrity marker missing (may be from older cache)"
+            fi
+          fi
+          
+          # Check critical files exist
+          if [ ! -f "$ONEAPI_PATH/setvars.sh" ]; then
             echo "✗ Error: setvars.sh not found - oneAPI installation may be incomplete"
             exit 1
           fi
+          echo "✓ Found setvars.sh"
           
-          echo "✓ oneAPI installation verified at: ${{ env.ONEAPI_INSTALL_PATH }}"
-          echo "✓ Essential components found (setvars.sh)"
+          if [ ! -d "$ONEAPI_PATH/compiler" ]; then
+            echo "✗ Error: Compiler directory not found - oneAPI installation may be incomplete"
+            exit 1
+          fi
+          echo "✓ Found compiler directory"
           
           # Source oneAPI environment
-          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          source $ONEAPI_PATH/setvars.sh
           
-          # Verify compiler is available
-          which icpx || (echo "✗ Error: icpx compiler not found" && exit 1)
-          echo "✓ icpx compiler found"
+          # Verify compiler is available and executable
+          if ! which icpx > /dev/null 2>&1; then
+            echo "✗ Error: icpx compiler not found in PATH after sourcing setvars.sh"
+            exit 1
+          fi
+          echo "✓ icpx compiler found in PATH"
+          
+          # Test that compiler can run
+          if ! icpx --version > /dev/null 2>&1; then
+            echo "✗ Error: icpx compiler found but cannot execute"
+            exit 1
+          fi
+          echo "✓ icpx compiler is executable"
+          
+          echo ""
+          echo "✓ oneAPI installation verified successfully"
+          
+          if [ "${{ steps.cache-oneapi.outputs.cache-hit }}" == "true" ]; then
+            echo "✓ Using cached oneAPI installation"
+          else
+            echo "✓ Using freshly installed oneAPI"
+          fi
 
       - name: Install dependencies
         run: |
@@ -420,13 +660,41 @@ jobs:
           # Copy Intel oneAPI runtime libraries required for execution
           # These libraries are needed to run SYCL-compiled binaries
           source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so* dist/ 2>/dev/null || echo "Warning: libsycl.so not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so dist/ 2>/dev/null || echo "Warning: pi libraries not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libOpenCL.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsvml.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libirng.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* dist/ 2>/dev/null || true
+          
+          # Search for libraries in multiple locations
+          ONEAPI_LIB_PATHS=(
+            "${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib"
+            "${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/linux/lib"
+            "${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/linux/lib/x64"
+          )
+          
+          # Copy SYCL runtime libraries (including libsycl.so.8 for 2025.x)
+          for lib_path in "${ONEAPI_LIB_PATHS[@]}"; do
+            if [ -d "$lib_path" ]; then
+              cp "$lib_path"/libsycl.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libpi_*.so dist/ 2>/dev/null || true
+              cp "$lib_path"/libOpenCL.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libsvml.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libirng.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libimf.so* dist/ 2>/dev/null || true
+              cp "$lib_path"/libintlc.so* dist/ 2>/dev/null || true
+            fi
+          done
+          
+          # Verify critical libraries are present
+          if ! ls dist/libsycl.so* 1> /dev/null 2>&1; then
+            echo "⚠ Warning: libsycl.so not found in package"
+            echo "Searched locations:"
+            for lib_path in "${ONEAPI_LIB_PATHS[@]}"; do
+              echo "  - $lib_path"
+              if [ -d "$lib_path" ]; then
+                echo "    Contents: $(ls "$lib_path"/libsycl* 2>/dev/null || echo 'none')"
+              fi
+            done
+          else
+            echo "✓ Found SYCL libraries:"
+            ls -lh dist/libsycl.so*
+          fi
           
           pushd dist
           zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so*
@@ -529,6 +797,18 @@ jobs:
           path: C:\VulkanSDK
           key: ${{ runner.os }}-vulkan-msvc-${{ env.VULKAN_SDK_VERSION }}
 
+      - name: Check Vulkan cache status
+        shell: powershell
+        run: |
+          $cacheHit = '${{ steps.cache-vulkan.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "Vulkan SDK cache hit - using cached installation"
+            Write-Host "Installation time saved: ~2-5 minutes"
+          } else {
+            Write-Host "Vulkan SDK cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 2-5 minutes"
+          }
+
       - name: Install Vulkan SDK
         if: steps.cache-vulkan.outputs.cache-hit != 'true'
         shell: powershell
@@ -552,10 +832,14 @@ jobs:
             Write-Error "winget failed to install Vulkan SDK (exit $LASTEXITCODE)"
             exit $LASTEXITCODE
           }
+          
+          Write-Host "✓ Vulkan SDK installation completed"
 
       - name: Locate Vulkan SDK
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+          
           $searchRoots = @(
             "C:\\VulkanSDK",
             "$Env:ProgramFiles\\VulkanSDK",
@@ -576,7 +860,7 @@ jobs:
           }
 
           if (-not $sdkRoot) {
-            Write-Error "Vulkan SDK not found"
+            Write-Error "Vulkan SDK not found in any expected location"
             exit 1
           }
           
@@ -588,6 +872,75 @@ jobs:
           }
 
           "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          
+          # Create cache integrity marker
+          "${{ env.VULKAN_SDK_VERSION }}" | Out-File -FilePath "$sdkRoot\version.txt" -Encoding utf8
+
+      - name: Verify Vulkan SDK installation
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          
+          if (-not $env:VULKAN_SDK) {
+            Write-Error "VULKAN_SDK environment variable not set"
+            exit 1
+          }
+          
+          Write-Host "Verifying Vulkan SDK at: $env:VULKAN_SDK"
+          
+          # Validate cache integrity if from cache
+          if ('${{ steps.cache-vulkan.outputs.cache-hit }}' -eq 'true') {
+            Write-Host "Validating cached Vulkan SDK..."
+            
+            $versionFile = Join-Path $env:VULKAN_SDK "version.txt"
+            if (Test-Path $versionFile) {
+              $cachedVersion = Get-Content $versionFile -Raw
+              $cachedVersion = $cachedVersion.Trim()
+              if ($cachedVersion -ne "${{ env.VULKAN_SDK_VERSION }}") {
+                Write-Host "⚠ Warning: Cache version mismatch (cached: $cachedVersion, expected: ${{ env.VULKAN_SDK_VERSION }})"
+              } else {
+                Write-Host "✓ Cache version matches: $cachedVersion"
+              }
+            } else {
+              Write-Host "⚠ Warning: Cache integrity marker missing"
+            }
+          }
+          
+          # Check critical directories and files exist
+          $missingComponents = @()
+          
+          $includeDir = Join-Path $env:VULKAN_SDK "Include"
+          if (-not (Test-Path $includeDir)) {
+            $missingComponents += "Include directory"
+          } else {
+            Write-Host "✓ Found Include directory"
+          }
+          
+          $libDir = Join-Path $env:VULKAN_SDK "Lib"
+          if (-not (Test-Path $libDir)) {
+            $missingComponents += "Lib directory"
+          } else {
+            Write-Host "✓ Found Lib directory"
+          }
+          
+          $binDir = Join-Path $env:VULKAN_SDK "Bin"
+          if (-not (Test-Path $binDir)) {
+            $missingComponents += "Bin directory"
+          } else {
+            Write-Host "✓ Found Bin directory"
+          }
+          
+          if ($missingComponents.Count -gt 0) {
+            Write-Host ""
+            Write-Error "✗ Vulkan SDK installation is incomplete. Missing: $($missingComponents -join ', ')"
+            if ('${{ steps.cache-vulkan.outputs.cache-hit }}' -eq 'true') {
+              Write-Host "Suggestion: Clear the cache and re-run the workflow"
+            }
+            exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "✓ Vulkan SDK installation verified successfully"
 
       - name: Configure (Vulkan MSVC)
         shell: cmd
@@ -599,8 +952,8 @@ jobs:
           set "PATH=%VULKAN_SDK%\Bin;%PATH%"
           cmake -S . -B build -G "Ninja" ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_SHARED_LIBS=ON ^
-            -DGGML_STATIC=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
             -DGGML_VULKAN=ON ^
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
@@ -624,9 +977,13 @@ jobs:
           mkdir dist
           copy build\bin\whisper-cli.exe dist\
           copy build\bin\whisper-bench.exe dist\
-          copy build\bin\*.dll dist\
+          if exist build\bin\*.dll copy build\bin\*.dll dist\
           pushd dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe *.dll
+          if exist *.dll (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe *.dll
+          ) else (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip whisper-cli.exe whisper-bench.exe
+          )
           popd
           move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan-msvc.zip dist\
 
@@ -650,11 +1007,11 @@ jobs:
     runs-on: windows-latest
     
     env:
-      # Standard Intel oneAPI installation directory on Windows (oneAPI 2024.x)
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2025.x)
       # Update this path if Intel changes their default installation location
       ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
       # oneAPI version for cache key - update when upgrading oneAPI
-      ONEAPI_VERSION: "2024.1"
+      ONEAPI_VERSION: "2025.3"
 
     steps:
       - name: Clone
@@ -687,6 +1044,7 @@ jobs:
         if: steps.cache-oneapi.outputs.cache-hit != 'true'
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
           Write-Host "Installing Intel oneAPI Base Toolkit..."
           Write-Host "Note: This installation will be cached for subsequent workflow runs."
           
@@ -705,45 +1063,86 @@ jobs:
             Write-Host ""
             Write-Host "Installation failed and cannot continue."
             exit 1
-          } else {
-            Write-Host "Installation completed successfully"
+          }
+          
+          Write-Host "✓ Installation completed successfully"
+          
+          # Create cache integrity marker
+          if (Test-Path "$env:ONEAPI_INSTALL_PATH") {
+            "${{ env.ONEAPI_VERSION }}" | Out-File -FilePath "$env:ONEAPI_INSTALL_PATH\version.txt" -Encoding utf8
           }
 
       - name: Set oneAPI environment variables and verify installation
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+          
           echo "ONEAPI_ROOT=$env:ONEAPI_INSTALL_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          
+          Write-Host "Verifying oneAPI installation at: $env:ONEAPI_INSTALL_PATH"
+          
+          # Check directory exists
+          if (-not (Test-Path $env:ONEAPI_INSTALL_PATH)) {
+            Write-Error "✗ Error: oneAPI installation directory not found at: $env:ONEAPI_INSTALL_PATH"
+            exit 1
+          }
+          
+          # Validate cache integrity if from cache
+          if ('${{ steps.cache-oneapi.outputs.cache-hit }}' -eq 'true') {
+            Write-Host "Validating cached oneAPI installation..."
+            
+            $versionFile = Join-Path $env:ONEAPI_INSTALL_PATH "version.txt"
+            if (Test-Path $versionFile) {
+              $cachedVersion = Get-Content $versionFile -Raw
+              $cachedVersion = $cachedVersion.Trim()
+              if ($cachedVersion -ne "${{ env.ONEAPI_VERSION }}") {
+                Write-Host "⚠ Warning: Cache version mismatch (cached: $cachedVersion, expected: ${{ env.ONEAPI_VERSION }})"
+              } else {
+                Write-Host "✓ Cache version matches: $cachedVersion"
+              }
+            } else {
+              Write-Host "⚠ Warning: Cache integrity marker missing (may be from older cache)"
+            }
+          }
           
           # Verify essential components are present
           $setvarsPath = Join-Path $env:ONEAPI_INSTALL_PATH "setvars.bat"
           $compilerPath = Join-Path $env:ONEAPI_INSTALL_PATH "compiler"
           
-          $installValid = $true
+          $missingComponents = @()
           
-          if (-not (Test-Path $env:ONEAPI_INSTALL_PATH)) {
-            Write-Host "✗ Error: oneAPI installation directory not found at: $env:ONEAPI_INSTALL_PATH"
-            $installValid = $false
-          } elseif (-not (Test-Path $setvarsPath)) {
-            Write-Host "✗ Error: setvars.bat not found - oneAPI installation may be incomplete"
-            $installValid = $false
-          } elseif (-not (Test-Path $compilerPath)) {
-            Write-Host "✗ Error: Compiler directory not found - oneAPI installation may be incomplete"
-            $installValid = $false
+          if (-not (Test-Path $setvarsPath)) {
+            $missingComponents += "setvars.bat"
           } else {
-            Write-Host "✓ oneAPI installation verified at: $env:ONEAPI_INSTALL_PATH"
-            Write-Host "✓ Essential components found (setvars.bat, compiler)"
+            Write-Host "✓ Found setvars.bat"
           }
           
-          if (-not $installValid) {
+          if (-not (Test-Path $compilerPath)) {
+            $missingComponents += "compiler directory"
+          } else {
+            Write-Host "✓ Found compiler directory"
+          }
+          
+          if ($missingComponents.Count -gt 0) {
             Write-Host ""
-            Write-Host "Installation validation failed. The build will likely fail."
+            Write-Error "✗ oneAPI installation is incomplete. Missing: $($missingComponents -join ', ')"
+            if ('${{ steps.cache-oneapi.outputs.cache-hit }}' -eq 'true') {
+              Write-Host "Suggestion: Clear the cache and re-run the workflow"
+            }
             Write-Host "This can happen if:"
             Write-Host "  1. Installation was interrupted or incomplete"
             Write-Host "  2. Cache was corrupted"
             Write-Host "  3. Disk space ran out during installation"
-            Write-Host ""
-            Write-Host "To fix: Manually invalidate the cache and re-run the workflow"
             exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "✓ oneAPI installation verified successfully"
+          
+          if ('${{ steps.cache-oneapi.outputs.cache-hit }}' -eq 'true') {
+            Write-Host "✓ Using cached oneAPI installation"
+          } else {
+            Write-Host "✓ Using freshly installed oneAPI"
           }
 
       - name: Configure (Intel GPU)
@@ -754,8 +1153,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_C_COMPILER=icx ^
             -DCMAKE_CXX_COMPILER=icx ^
-            -DBUILD_SHARED_LIBS=ON ^
-            -DGGML_STATIC=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
             -DGGML_SYCL=ON ^
             -DGGML_SYCL_F16=ON ^
             -DWHISPER_SYCL=ON ^
@@ -778,61 +1177,25 @@ jobs:
           # Create dist directory
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           
-          # Copy executables and build DLLs
+          # Copy executables
           Copy-Item build\bin\whisper-cli.exe dist\
           Copy-Item build\bin\whisper-bench.exe dist\
-          Copy-Item build\bin\*.dll dist\
           
-          # Copy Intel oneAPI runtime DLLs required for execution
-          $dllsToCopy = @(
-            'svml_dispmd.dll',
-            'libmmd.dll',
-            'libiomp5md.dll',
-            'sycl.dll',
-            'sycl7.dll'
-          )
-          
-          foreach ($dll in $dllsToCopy) {
-            $sourcePath = "$env:ONEAPI_ROOT\compiler\latest\bin\$dll"
-            if (Test-Path $sourcePath) {
-              Copy-Item $sourcePath dist\
-              Write-Host "Copied $dll"
-            } else {
-              Write-Host "Warning: $dll not found at $sourcePath"
-            }
-          }
-          
-          # Copy PI (Plugin Interface) DLLs - these may be in bin or bin\plugins
-          $piLocations = @(
-            "$env:ONEAPI_ROOT\compiler\latest\bin",
-            "$env:ONEAPI_ROOT\compiler\latest\bin\plugins"
-          )
-          
-          $piDlls = @('pi_level_zero.dll', 'pi_opencl.dll', 'pi_cuda.dll', 'pi_hip.dll')
-          $piCopied = 0
-          
-          foreach ($location in $piLocations) {
-            if (Test-Path $location) {
-              foreach ($piDll in $piDlls) {
-                $piPath = Join-Path $location $piDll
-                if (Test-Path $piPath) {
-                  Copy-Item $piPath dist\
-                  Write-Host "Copied $piDll from $location"
-                  $piCopied++
-                }
-              }
-            }
-          }
-          
-          if ($piCopied -eq 0) {
-            Write-Host "Warning: No PI plugin DLLs found"
-          } else {
-            Write-Host "Copied $piCopied PI plugin DLLs"
+          # Copy build DLLs if they exist (static build may not have any)
+          if (Test-Path "build\bin\*.dll") {
+            Copy-Item build\bin\*.dll dist\
           }
           
           # Create zip package
           Push-Location dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
+          $files = Get-ChildItem -File
+          if ($files.Count -gt 2) {
+            # Has DLLs
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe *.dll
+          } else {
+            # No DLLs (static build)
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip whisper-cli.exe whisper-bench.exe
+          }
           Pop-Location
           Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
 
@@ -892,6 +1255,7 @@ jobs:
         if: steps.cache-cuda.outputs.cache-hit != 'true'
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
           Write-Host "Installing NVIDIA CUDA Toolkit..."
           Write-Host "Note: This installation will be cached for subsequent workflow runs."
           
@@ -901,69 +1265,104 @@ jobs:
           choco install cuda -y --no-progress
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host "✗ Error: Installation failed with exit code $LASTEXITCODE"
             Write-Host ""
             Write-Host "Installation failed and cannot continue."
             exit 1
-          } else {
-            Write-Host "Installation completed successfully"
           }
+          
+          Write-Host "✓ Installation completed successfully"
 
       - name: Set CUDA environment variables and verify installation
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+          
           # Detect actual CUDA installation path
           # Chocolatey installs latest version which may differ from our env var
           $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
           
-          if (Test-Path $cudaBasePath) {
-            # Find the installed CUDA version directory
-            $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory | Where-Object { $_.Name -match '^v\d+\.\d+$' } | Sort-Object Name -Descending
+          if (-not (Test-Path $cudaBasePath)) {
+            Write-Error "✗ Error: CUDA base directory not found at $cudaBasePath"
+            exit 1
+          }
+          
+          # Find the installed CUDA version directory
+          $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory | Where-Object { $_.Name -match '^v\d+\.\d+$' } | Sort-Object Name -Descending
+          
+          if ($installedVersions.Count -eq 0) {
+            Write-Error "✗ Error: No CUDA version directories found in $cudaBasePath"
+            exit 1
+          }
+          
+          $actualCudaPath = $installedVersions[0].FullName
+          Write-Host "Detected CUDA installation at: $actualCudaPath"
+          
+          # Set CUDA environment variables with actual path
+          echo "CUDA_PATH=$actualCudaPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          
+          # Add CUDA to PATH
+          $cudaBinPath = Join-Path $actualCudaPath "bin"
+          echo "$cudaBinPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # Create/verify cache integrity marker
+          if ('${{ steps.cache-cuda.outputs.cache-hit }}' -eq 'true') {
+            Write-Host "Validating cached CUDA installation..."
             
-            if ($installedVersions.Count -gt 0) {
-              $actualCudaPath = $installedVersions[0].FullName
-              Write-Host "Detected CUDA installation at: $actualCudaPath"
-              
-              # Set CUDA environment variables with actual path
-              echo "CUDA_PATH=$actualCudaPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-              
-              # Add CUDA to PATH
-              $cudaBinPath = Join-Path $actualCudaPath "bin"
-              echo "$cudaBinPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-              
-              # Verify essential components are present
-              $nvccPath = Join-Path $actualCudaPath "bin\nvcc.exe"
-              $includeDir = Join-Path $actualCudaPath "include"
-              $libDir = Join-Path $actualCudaPath "lib\x64"
-              
-              $installValid = $true
-              
-              if (-not (Test-Path $nvccPath)) {
-                Write-Host "Error: nvcc.exe not found - CUDA installation may be incomplete"
-                $installValid = $false
-              } elseif (-not (Test-Path $includeDir)) {
-                Write-Host "Error: Include directory not found - CUDA installation may be incomplete"
-                $installValid = $false
-              } elseif (-not (Test-Path $libDir)) {
-                Write-Host "Error: Library directory not found - CUDA installation may be incomplete"
-                $installValid = $false
-              } else {
-                Write-Host "CUDA Toolkit verified at: $actualCudaPath"
-                Write-Host "Essential components found (nvcc.exe, include, lib)"
-              }
-              
-              if (-not $installValid) {
-                Write-Host ""
-                Write-Host "Installation validation failed. The build will likely fail."
-                exit 1
-              }
+            $versionFile = Join-Path $actualCudaPath "version.txt"
+            if (Test-Path $versionFile) {
+              $cachedVersion = Get-Content $versionFile -Raw
+              $cachedVersion = $cachedVersion.Trim()
+              Write-Host "✓ Cache version marker found: $cachedVersion"
             } else {
-              Write-Host "Error: No CUDA version directories found in $cudaBasePath"
-              exit 1
+              Write-Host "⚠ Warning: Cache integrity marker missing (may be from older cache)"
             }
           } else {
-            Write-Host "Error: CUDA base directory not found at $cudaBasePath"
+            # Create integrity marker for new installations
+            $versionFile = Join-Path $actualCudaPath "version.txt"
+            "${{ env.CUDA_VERSION }}" | Out-File -FilePath $versionFile -Encoding utf8
+          }
+          
+          # Verify essential components are present
+          $missingComponents = @()
+          
+          $nvccPath = Join-Path $actualCudaPath "bin\nvcc.exe"
+          if (-not (Test-Path $nvccPath)) {
+            $missingComponents += "nvcc.exe"
+          } else {
+            Write-Host "✓ Found nvcc.exe"
+          }
+          
+          $includeDir = Join-Path $actualCudaPath "include"
+          if (-not (Test-Path $includeDir)) {
+            $missingComponents += "include directory"
+          } else {
+            Write-Host "✓ Found include directory"
+          }
+          
+          $libDir = Join-Path $actualCudaPath "lib\x64"
+          if (-not (Test-Path $libDir)) {
+            $missingComponents += "lib\x64 directory"
+          } else {
+            Write-Host "✓ Found lib\x64 directory"
+          }
+          
+          if ($missingComponents.Count -gt 0) {
+            Write-Host ""
+            Write-Error "✗ CUDA installation is incomplete. Missing: $($missingComponents -join ', ')"
+            if ('${{ steps.cache-cuda.outputs.cache-hit }}' -eq 'true') {
+              Write-Host "Suggestion: Clear the cache and re-run the workflow"
+            }
             exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "✓ CUDA Toolkit verified successfully"
+          
+          if ('${{ steps.cache-cuda.outputs.cache-hit }}' -eq 'true') {
+            Write-Host "✓ Using cached CUDA installation"
+          } else {
+            Write-Host "✓ Using freshly installed CUDA"
           }
 
       - name: Configure (CUDA)
@@ -974,8 +1373,8 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DBUILD_SHARED_LIBS=ON ^
-            -DGGML_STATIC=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
             -DGGML_CUDA=ON ^
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
@@ -997,9 +1396,13 @@ jobs:
           mkdir dist
           copy build\bin\whisper-cli.exe dist\
           copy build\bin\whisper-bench.exe dist\
-          copy build\bin\*.dll dist\
+          if exist build\bin\*.dll copy build\bin\*.dll dist\
           pushd dist
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe *.dll
+          if exist *.dll (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe *.dll
+          ) else (
+            tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip whisper-cli.exe whisper-bench.exe
+          )
           popd
           move whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
 
