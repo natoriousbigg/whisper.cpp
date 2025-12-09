@@ -19,7 +19,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-// Windows compatibility for case-insensitive string comparison
+// Windows compatibility: map strcasecmp to _stricmp for case-insensitive string comparison
 #define strcasecmp _stricmp
 #else
 #include <strings.h>  // for strcasecmp on Unix/Linux
@@ -201,7 +201,7 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
                     params.detect_language = false;
                     i++; // consume the "false" argument
                 } else {
-                    // No valid boolean value follows, treat as flag
+                    // Next argument is not a boolean value (likely another flag or filename), treat as flag
                     params.detect_language = true;
                 }
             } else {
