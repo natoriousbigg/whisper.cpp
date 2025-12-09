@@ -129,10 +129,19 @@ static char * requires_value_error(const std::string & arg) {
 }
 
 // Helper function to parse optional boolean value from command line
-// Returns true if next arg is a boolean value (and consumes it), false otherwise
+// Checks if the next argument is a boolean value (true/false/1/0) and consumes it if so.
+// Returns true if a boolean argument was consumed, false otherwise.
+// The boolean value is stored in the 'param' parameter.
 static bool parse_optional_bool(int & i, int argc, char ** argv, bool & param) {
     if (i + 1 < argc) {
         std::string next_arg = argv[i + 1];
+        
+        // Don't consume the next argument if it looks like a flag
+        if (!next_arg.empty() && next_arg[0] == '-') {
+            param = true;
+            return false;
+        }
+        
         // Convert to lowercase for case-insensitive comparison
         for (auto & c : next_arg) {
             c = tolower((unsigned char)c);
