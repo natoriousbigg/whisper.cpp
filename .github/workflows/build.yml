@@ -439,6 +439,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=icx \
             -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
             -DGGML_AVX512=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -473,8 +475,31 @@ jobs:
           cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* dist/ 2>/dev/null || true
           cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* dist/ 2>/dev/null || true
           
+          # Create README with usage instructions
+          cat > dist/README.txt << 'EOF'
+          whisper.cpp - Ubuntu Intel GPU Build
+          =====================================
+          
+          This package includes Intel oneAPI SYCL runtime libraries.
+          The binaries are built with RPATH set to $ORIGIN, so they should
+          automatically find the shared libraries in the same directory.
+          
+          To run:
+            ./whisper-cli [options]
+          
+          If you encounter library loading errors, you can explicitly set:
+            export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+            ./whisper-cli [options]
+          
+          Alternatively, if you have Intel oneAPI installed, source the environment:
+            source /opt/intel/oneapi/setvars.sh
+            ./whisper-cli [options]
+          
+          For more information, visit: https://github.com/ggerganov/whisper.cpp
+          EOF
+          
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so*
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so* README.txt
           popd
 
       - name: Upload whisper-cli package
