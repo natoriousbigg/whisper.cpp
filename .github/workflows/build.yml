@@ -137,7 +137,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/vulkan-sdk
-          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-
 
       - name: Check Vulkan cache status
         run: |
@@ -268,7 +270,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/cuda-${{ env.CUDA_VERSION }}
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
 
       - name: Check CUDA cache status
         run: |
@@ -507,7 +511,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\VulkanSDK
-          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
+          key: ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}-
 
       - name: Install Vulkan SDK
         if: steps.cache-vulkan.outputs.cache-hit != 'true'
@@ -661,8 +667,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
-          # Cache key includes CUDA version only - cache is shared across branches
-          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          # Cache key includes run_id to prevent cache collision during concurrent saves
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}-
 
       - name: Check CUDA cache status
         shell: powershell
