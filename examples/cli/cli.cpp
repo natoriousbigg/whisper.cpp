@@ -21,6 +21,8 @@
 #include <windows.h>
 // Windows compatibility for case-insensitive string comparison
 #define strcasecmp _stricmp
+#else
+#include <strings.h>  // for strcasecmp on Unix/Linux
 #endif
 
 // helper function to replace substrings
