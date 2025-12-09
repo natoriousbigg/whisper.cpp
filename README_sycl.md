@@ -230,6 +230,8 @@ Using device **0** (Intel(R) Arc(TM) A770 Graphics) as main device
 ## Known Issue
 
 - Error:  `error while loading shared libraries: libsycl.so.X: cannot open shared object file: No such file or directory`.
+  
+  Or: `error while loading shared libraries: libmkl_sycl_blas.so.5: cannot open shared object file: No such file or directory`.
 
   This can happen if:
   
@@ -238,11 +240,13 @@ Using device **0** (Intel(R) Arc(TM) A770 Graphics) as main device
      Install oneAPI base toolkit and enable it by: `source /opt/intel/oneapi/setvars.sh`.
   
   2. Using pre-built Ubuntu binary package: The package includes the required SYCL runtime 
-     libraries. The binaries are built with RPATH set to `$ORIGIN`, which means they should 
+     libraries and Intel MKL libraries. The binaries are built with RPATH set to `$ORIGIN`, which means they should 
      automatically find the libraries in the same directory. If you still encounter this error:
      - Make sure all the `.so` files from the package are in the same directory as the executable
      - Try setting: `export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH` before running
      - Check that the RPATH is set correctly: `patchelf --print-rpath ./whisper-cli`
+     
+  See `UBUNTU_ONEAPI_MKL_FIX.md` for more details on MKL library requirements.
 
 
 - Hang during startup
