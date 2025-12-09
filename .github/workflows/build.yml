@@ -741,7 +741,7 @@ jobs:
     runs-on: windows-latest
     
     env:
-      # Standard Intel oneAPI installation directory on Windows (oneAPI 2025.x)
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2025.0)
       # Update this path if Intel changes their default installation location
       ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
       # oneAPI version for cache key - update when upgrading oneAPI
@@ -908,7 +908,7 @@ jobs:
             'mkl_tbb_thread.2.dll'
           )
           
-          # Unified Runtime and TBB DLLs (required for oneAPI 2024.x and newer, including 2025.x)
+          # Unified Runtime and TBB DLLs (required for oneAPI 2024.x and newer)
           # ur_win_proxy_loader.dll - Unified Runtime proxy loader for SYCL
           # tbb12.dll - Threading Building Blocks version 12
           $urTbbDlls = @(
