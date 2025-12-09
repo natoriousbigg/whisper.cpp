@@ -143,15 +143,15 @@ static bool parse_optional_bool(int & i, int argc, char ** argv, bool & param) {
         }
         
         // Convert to lowercase for case-insensitive comparison
-        for (auto & c : next_arg) {
-            c = tolower((unsigned char)c);
-        }
+        std::string lower_arg = next_arg;
+        std::transform(lower_arg.begin(), lower_arg.end(), lower_arg.begin(),
+                      [](unsigned char c) { return std::tolower(c); });
         
-        if (next_arg == "true" || next_arg == "1") {
+        if (lower_arg == "true" || lower_arg == "1") {
             param = true;
             i++; // consume the next argument
             return true;
-        } else if (next_arg == "false" || next_arg == "0") {
+        } else if (lower_arg == "false" || lower_arg == "0") {
             param = false;
             i++; // consume the next argument
             return true;
