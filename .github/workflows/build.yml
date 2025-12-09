@@ -142,17 +142,34 @@ jobs:
             ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
       - name: Check Vulkan cache status
+        id: vulkan-cache-check
         run: |
-          if [ "${{ steps.cache-vulkan.outputs.cache-hit }}" == "true" ]; then
-            echo "Vulkan SDK cache hit - using cached installation"
+          # Check if Vulkan SDK was restored from cache by verifying the installation exists
+          # Note: cache-hit is only 'true' for exact key match, not restore-keys match
+          VULKAN_PATH="${{ github.workspace }}/vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64"
+          echo "Checking for Vulkan SDK at: $VULKAN_PATH"
+          echo "Cache hit output: '${{ steps.cache-vulkan.outputs.cache-hit }}'"
+          
+          # Debug: List what's in the vulkan-sdk directory if it exists
+          if [ -d "${{ github.workspace }}/vulkan-sdk" ]; then
+            echo "Contents of vulkan-sdk directory:"
+            ls -la "${{ github.workspace }}/vulkan-sdk" || true
+          else
+            echo "vulkan-sdk directory does not exist"
+          fi
+          
+          if [ -d "$VULKAN_PATH" ] && [ -d "$VULKAN_PATH/bin" ]; then
+            echo "Vulkan SDK cache restored - using cached installation"
             echo "Installation time saved: ~2-3 minutes"
+            echo "cache_restored=true" >> $GITHUB_OUTPUT
           else
             echo "Vulkan SDK cache miss - will install and cache for future runs"
             echo "This will take approximately 2-3 minutes"
+            echo "cache_restored=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Install Vulkan SDK
-        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        if: steps.vulkan-cache-check.outputs.cache_restored != 'true'
         run: |
           # Download Vulkan SDK
           mkdir -p ${{ github.workspace }}/vulkan-sdk
@@ -275,17 +292,38 @@ jobs:
             ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
 
       - name: Check CUDA cache status
+        id: cuda-cache-check
         run: |
-          if [ "${{ steps.cache-cuda.outputs.cache-hit }}" == "true" ]; then
-            echo "CUDA cache hit - using cached installation"
+          # Check if CUDA was restored from cache by verifying the installation exists
+          # Note: cache-hit is only 'true' for exact key match, not restore-keys match
+          CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          echo "Checking for CUDA at: $CUDA_PATH"
+          echo "Cache hit output: '${{ steps.cache-cuda.outputs.cache-hit }}'"
+          
+          # Debug: List what's in /usr/local if cuda directory exists
+          if [ -d "$CUDA_PATH" ]; then
+            echo "Contents of $CUDA_PATH:"
+            ls -la "$CUDA_PATH" || true
+            if [ -d "$CUDA_PATH/bin" ]; then
+              echo "Contents of $CUDA_PATH/bin:"
+              ls "$CUDA_PATH/bin" | head -10 || true
+            fi
+          else
+            echo "CUDA directory does not exist at $CUDA_PATH"
+          fi
+          
+          if [ -d "$CUDA_PATH" ] && [ -f "$CUDA_PATH/bin/nvcc" ]; then
+            echo "CUDA cache restored - using cached installation"
             echo "Installation time saved: ~5-10 minutes"
+            echo "cache_restored=true" >> $GITHUB_OUTPUT
           else
             echo "CUDA cache miss - will install and cache for future runs"
             echo "This will take approximately 5-10 minutes"
+            echo "cache_restored=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Install CUDA Toolkit
-        if: steps.cache-cuda.outputs.cache-hit != 'true'
+        if: steps.cuda-cache-check.outputs.cache_restored != 'true'
         run: |
           # Install CUDA repository
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
@@ -515,8 +553,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-vulkan-${{ env.VULKAN_SDK_VERSION }}
 
+      - name: Check Vulkan cache status
+        id: vulkan-cache-check
+        shell: powershell
+        run: |
+          # Check if Vulkan SDK was restored from cache by verifying the installation exists
+          # Note: cache-hit is only 'true' for exact key match, not restore-keys match
+          $vulkanPath = "C:\VulkanSDK"
+          Write-Host "Checking for Vulkan SDK at: $vulkanPath"
+          Write-Host "Cache hit output: '${{ steps.cache-vulkan.outputs.cache-hit }}'"
+          
+          # Debug: List what's in the VulkanSDK directory if it exists
+          if (Test-Path $vulkanPath) {
+            Write-Host "Contents of VulkanSDK directory:"
+            Get-ChildItem $vulkanPath | Format-Table -AutoSize
+          } else {
+            Write-Host "VulkanSDK directory does not exist"
+          }
+          
+          if ((Test-Path $vulkanPath) -and (Get-ChildItem $vulkanPath -Directory | Where-Object { Test-Path (Join-Path $_.FullName "Bin") })) {
+            Write-Host "Vulkan SDK cache restored - using cached installation"
+            Write-Host "Installation time saved: ~2-3 minutes"
+            "cache_restored=true" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            Write-Host "Vulkan SDK cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 2-3 minutes"
+            "cache_restored=false" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+
       - name: Install Vulkan SDK
-        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        if: steps.vulkan-cache-check.outputs.cache_restored != 'true'
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -566,9 +632,9 @@ jobs:
             exit 1
           }
           
-          $cacheHit = '${{ steps.cache-vulkan.outputs.cache-hit }}'
-          if ($cacheHit -eq 'true') {
-            Write-Host "Vulkan SDK cache hit - using cached installation at: $sdkRoot"
+          $cacheRestored = '${{ steps.vulkan-cache-check.outputs.cache_restored }}'
+          if ($cacheRestored -eq 'true') {
+            Write-Host "Using cached Vulkan SDK installation at: $sdkRoot"
           } else {
             Write-Host "Vulkan SDK installed at: $sdkRoot"
           }
@@ -673,19 +739,53 @@ jobs:
             ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
 
       - name: Check CUDA cache status
+        id: cuda-cache-check
         shell: powershell
         run: |
-          $cacheHit = '${{ steps.cache-cuda.outputs.cache-hit }}'
-          if ($cacheHit -eq 'true') {
-            Write-Host "CUDA cache hit - using cached installation"
-            Write-Host "Installation time saved: ~10 minutes"
+          # Check if CUDA was restored from cache by verifying the installation exists
+          # Note: cache-hit is only 'true' for exact key match, not restore-keys match
+          $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
+          $cacheRestored = $false
+          
+          Write-Host "Checking for CUDA at: $cudaBasePath"
+          Write-Host "Cache hit output: '${{ steps.cache-cuda.outputs.cache-hit }}'"
+          
+          # Debug: List what's in the CUDA directory if it exists
+          if (Test-Path $cudaBasePath) {
+            Write-Host "Contents of CUDA base directory:"
+            Get-ChildItem $cudaBasePath | Format-Table -AutoSize
+            
+            $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^v\d+\.\d+$' }
+            if ($installedVersions) {
+              foreach ($version in $installedVersions) {
+                $nvccPath = Join-Path $version.FullName "bin\nvcc.exe"
+                Write-Host "Checking for nvcc at: $nvccPath"
+                if (Test-Path $nvccPath) {
+                  Write-Host "CUDA cache restored - using cached installation at: $($version.FullName)"
+                  Write-Host "Installation time saved: ~10 minutes"
+                  $cacheRestored = $true
+                  break
+                }
+              }
+            }
           } else {
+            Write-Host "CUDA base directory does not exist"
+          }
+          
+          if (-not $cacheRestored) {
             Write-Host "CUDA cache miss - will install and cache for future runs"
             Write-Host "This will take approximately 10 minutes"
           }
+          
+          # Output consistent format with other cache check steps
+          if ($cacheRestored) {
+            "cache_restored=true" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            "cache_restored=false" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Install CUDA Toolkit
-        if: steps.cache-cuda.outputs.cache-hit != 'true'
+        if: steps.cuda-cache-check.outputs.cache_restored != 'true'
         shell: powershell
         run: |
           Write-Host "Installing NVIDIA CUDA Toolkit..."
