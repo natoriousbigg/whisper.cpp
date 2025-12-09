@@ -25,6 +25,8 @@ endif()
 ### Missing Libraries
 The build workflow installed `intel-oneapi-mkl-devel` which includes:
 - `libmkl_sycl_blas.so*` - SYCL BLAS interface library (the primary missing library)
+- `libmkl_sycl_lapack.so*` - SYCL LAPACK interface library for linear algebra operations
+- `libmkl_sycl_vm.so*` - SYCL Vector Math library for vectorized math functions
 - `libmkl_intel_ilp64.so*` - MKL core library with ILP64 interface
 - `libmkl_intel_thread.so*` - Threading layer for parallel operations (OpenMP-based)
 - `libmkl_tbb_thread.so*` - Threading layer for parallel operations (TBB-based)
@@ -41,7 +43,7 @@ Updated lines 511-529 in the "Package whisper-cli and whisper-bench (Ubuntu)" st
 
 ```bash
 echo "Packaging Intel MKL libraries..."
-for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_thread libmkl_core libmkl_sycl; do
+for lib in libmkl_sycl_blas libmkl_sycl_lapack libmkl_sycl_vm libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_thread libmkl_core libmkl_sycl; do
   found=false
   # Search in multiple possible MKL library locations
   for mkl_path in "${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/intel64" "${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib"; do
