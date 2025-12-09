@@ -19,6 +19,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+// Windows compatibility for case-insensitive string comparison
+#define strcasecmp _stricmp
 #endif
 
 // helper function to replace substrings
