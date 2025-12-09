@@ -128,6 +128,31 @@ static char * requires_value_error(const std::string & arg) {
     exit(0);
 }
 
+// Helper function to parse optional boolean value from command line
+// Returns true if next arg is a boolean value (and consumes it), false otherwise
+static bool parse_optional_bool(int & i, int argc, char ** argv, bool & param) {
+    if (i + 1 < argc) {
+        std::string next_arg = argv[i + 1];
+        // Convert to lowercase for case-insensitive comparison
+        for (auto & c : next_arg) {
+            c = tolower((unsigned char)c);
+        }
+        
+        if (next_arg == "true" || next_arg == "1") {
+            param = true;
+            i++; // consume the next argument
+            return true;
+        } else if (next_arg == "false" || next_arg == "0") {
+            param = false;
+            i++; // consume the next argument
+            return true;
+        }
+    }
+    // No boolean value found, set to true by default (flag is present)
+    param = true;
+    return false;
+}
+
 static bool whisper_params_parse(int argc, char ** argv, whisper_params & params) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -186,7 +211,7 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
         else if (arg == "-pp"   || arg == "--print-progress")       { params.print_progress  = true; }
         else if (arg == "-nt"   || arg == "--no-timestamps")        { params.no_timestamps   = true; }
         else if (arg == "-l"    || arg == "--language")             { params.language        = whisper_param_turn_lowercase(ARGV_NEXT); }
-        else if (arg == "-dl"   || arg == "--detect-language")      { params.detect_language = true; }
+        else if (arg == "-dl"   || arg == "--detect-language")      { parse_optional_bool(i, argc, argv, params.detect_language); }
         else if (                  arg == "--prompt")               { params.prompt          = ARGV_NEXT; }
         else if (                  arg == "--carry-initial-prompt") { params.carry_initial_prompt = true; }
         else if (arg == "-m"    || arg == "--model")                { params.model           = ARGV_NEXT; }
