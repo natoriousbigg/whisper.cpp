@@ -1165,27 +1165,6 @@ jobs:
             exit 1
           }
           
-          # Copy nvcuda.dll (NVIDIA CUDA driver library)
-          # Try multiple locations: System32 (installed with GPU drivers) or CUDA toolkit
-          $nvcudaLocations = @(
-            "$env:SystemRoot\System32\nvcuda.dll",
-            "$env:CUDA_PATH\bin\nvcuda.dll"
-          )
-          
-          $nvcudaCopied = $false
-          foreach ($location in $nvcudaLocations) {
-            if (Test-Path $location) {
-              Copy-Item $location dist\
-              Write-Host "Copied nvcuda.dll from $location"
-              $nvcudaCopied = $true
-              break
-            }
-          }
-          
-          if (-not $nvcudaCopied) {
-            Write-Host "Warning: nvcuda.dll not found - runtime may require NVIDIA GPU drivers installed"
-          }
-          
           # Create zip package
           Push-Location dist
           $filesToZip = @(Get-ChildItem -Path "*.exe" -Name)
