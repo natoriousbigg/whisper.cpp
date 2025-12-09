@@ -363,7 +363,7 @@ jobs:
       DEB_ARCH: amd64
       TRIPLET: x86_64-linux-gnu
       PACKAGE_SUFFIX: "-intelgpu"
-      ONEAPI_VERSION: "2024.1"
+      ONEAPI_VERSION: "2025.0"
       ONEAPI_INSTALL_PATH: /opt/intel/oneapi
 
     steps:
@@ -741,11 +741,11 @@ jobs:
     runs-on: windows-latest
     
     env:
-      # Standard Intel oneAPI installation directory on Windows (oneAPI 2024.x)
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2025.x)
       # Update this path if Intel changes their default installation location
       ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
       # oneAPI version for cache key - update when upgrading oneAPI
-      ONEAPI_VERSION: "2024.1"
+      ONEAPI_VERSION: "2025.0"
 
     steps:
       - name: Clone
@@ -908,7 +908,7 @@ jobs:
             'mkl_tbb_thread.2.dll'
           )
           
-          # Unified Runtime and TBB DLLs (required for oneAPI 2024.x and newer)
+          # Unified Runtime and TBB DLLs (required for oneAPI 2024.x and newer, including 2025.x)
           # ur_win_proxy_loader.dll - Unified Runtime proxy loader for SYCL
           # tbb12.dll - Threading Building Blocks version 12
           $urTbbDlls = @(
