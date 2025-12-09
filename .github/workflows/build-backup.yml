@@ -1,0 +1,715 @@
+name: CI Backup (oneAPI builds)
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+    paths: ['.github/workflows/build-backup.yml',
+            '**/CMakeLists.txt',
+            '**/Makefile',
+            '**/*.mk',
+            '**/*.cmake',
+            '**/*.in',
+            '**/*.h',
+            '**/*.hpp',
+            '**/*.c',
+            '**/*.cpp',
+            '**/*.cu',
+            '**/*.cuh',
+            '**/*.cl',
+            '**/*.swift',
+            '**/*.m',
+            '**/*.mm',
+            '**/*.metal',
+            '**/*.comp',
+            '**/*.java']
+
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create new release'
+        required: true
+        type: boolean
+      pre_release_tag:
+        description: 'Pre-release tag name'
+        required: false
+        type: string
+      run_type:
+        description: 'Workflow type to run'
+        required: true
+        type: choice
+        options:
+          - full-ci
+          - release-only
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write  # for creating release
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  determine-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.tag.outputs.name }}
+      should_release: ${{ steps.tag.outputs.should_release }}
+
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tag name
+        id: tag
+        shell: bash
+        run: |
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          SHORT_HASH=$(git rev-parse --short=7 HEAD)
+          CUSTOM_TAG="${{ github.event.inputs.pre_release_tag }}"
+          SHOULD_RELEASE="false"
+
+          echo "Raw values:"
+          echo "BUILD_NUMBER: $BUILD_NUMBER"
+          echo "SHORT_HASH: $SHORT_HASH"
+          echo "BRANCH_NAME: ${{ env.BRANCH_NAME }}"
+          echo "CUSTOM_TAG: $CUSTOM_TAG"
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "Using pushed tag name"
+            TAG_NAME="${{ github.ref_name }}"
+            SHOULD_RELEASE="true"
+          elif [[ -n "$CUSTOM_TAG" ]]; then
+            echo "Using custom tag"
+            TAG_NAME="${CUSTOM_TAG}"
+            SHOULD_RELEASE="true"
+          elif [[ "${{ github.event.inputs.create_release }}" == "true" ]]; then
+            echo "Manual release requested"
+            SHOULD_RELEASE="true"
+            TAG_NAME="b${BUILD_NUMBER}"
+          elif [[ "${{ env.BRANCH_NAME }}" == "master" ]]; then
+            echo "Using master branch format"
+            TAG_NAME="b${BUILD_NUMBER}"
+            SHOULD_RELEASE="false"
+          else
+            echo "Using non-master branch format"
+            SAFE_NAME=$(echo "${{ env.BRANCH_NAME }}" | tr '/' '-')
+            TAG_NAME="${SAFE_NAME}-b${BUILD_NUMBER}-${SHORT_HASH}"
+            SHOULD_RELEASE="false"
+          fi
+
+          echo "Final tag name: $TAG_NAME"
+          echo "Should release: $SHOULD_RELEASE"
+          echo "name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+
+  ubuntu-build-oneapi-x64:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Ubuntu x64 (IntelGPU)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      PACKAGE_SUFFIX: "-intelgpu"
+      ONEAPI_VERSION: "2025.0"
+      ONEAPI_INSTALL_PATH: /opt/intel/oneapi
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Cache Intel oneAPI
+        id: cache-oneapi
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ONEAPI_INSTALL_PATH }}
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
+
+      - name: Check oneAPI cache status
+        run: |
+          if [ "${{ steps.cache-oneapi.outputs.cache-hit }}" == "true" ]; then
+            echo "oneAPI cache hit - using cached installation"
+            echo "Installation time saved: ~20 minutes"
+          else
+            echo "oneAPI cache miss - will install and cache for future runs"
+            echo "This will take approximately 15-20 minutes"
+          fi
+
+      - name: Install Intel oneAPI Base Toolkit
+        if: steps.cache-oneapi.outputs.cache-hit != 'true'
+        run: |
+          echo "Installing Intel oneAPI Base Toolkit..."
+          echo "Note: This installation will be cached for subsequent workflow runs."
+          
+          # Add Intel repository
+          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          
+          # Install oneAPI Base Toolkit
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
+          
+          echo "Installation completed successfully"
+
+      - name: Set oneAPI environment variables and verify installation
+        run: |
+          if [ ! -d "${{ env.ONEAPI_INSTALL_PATH }}" ]; then
+            echo "✗ Error: oneAPI installation directory not found at: ${{ env.ONEAPI_INSTALL_PATH }}"
+            exit 1
+          fi
+          
+          if [ ! -f "${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh" ]; then
+            echo "✗ Error: setvars.sh not found - oneAPI installation may be incomplete"
+            exit 1
+          fi
+          
+          echo "✓ oneAPI installation verified at: ${{ env.ONEAPI_INSTALL_PATH }}"
+          echo "✓ Essential components found (setvars.sh)"
+          
+          # Source oneAPI environment
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          
+          # Verify compiler is available
+          which icpx || (echo "✗ Error: icpx compiler not found" && exit 1)
+          echo "✓ icpx compiler found"
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
+            libsdl2-dev:${DEB_ARCH} patchelf
+
+      - name: Configure (Intel GPU)
+        run: |
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=icx \
+            -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_BUILD_RPATH='$ORIGIN' \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DCMAKE_SKIP_BUILD_RPATH=OFF \
+            -DGGML_AVX512=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DGGML_SYCL=ON \
+            -DGGML_SYCL_F16=ON \
+            -DWHISPER_SYCL=ON \
+            -DWHISPER_SYCL_F16=ON \
+            -DWHISPER_SDL2=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build (Intel GPU)
+        run: |
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          cmake --build build --config Release -j $(nproc)
+
+      - name: Set RPATH on binaries
+        run: |
+          # Set RPATH to $ORIGIN so binaries look for libraries in the same directory
+          binaries="whisper-cli whisper-bench"
+          for binary in $binaries; do
+            patchelf --set-rpath '$ORIGIN' build/bin/$binary
+          done
+          
+          # Verify RPATH is set correctly
+          for binary in $binaries; do
+            echo "Verifying RPATH for $binary:"
+            patchelf --print-rpath build/bin/$binary
+          done
+
+      - name: Package whisper-cli and whisper-bench (Ubuntu)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli build/bin/whisper-bench dist/
+          
+          # Copy Intel oneAPI runtime libraries required for execution
+          # These libraries are needed to run SYCL-compiled binaries
+          source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
+          
+          echo "Packaging Intel oneAPI SYCL runtime libraries..."
+          for lib in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so*; do
+            if [ -f "$lib" ]; then
+              echo "  - Copying $(basename $lib)"
+              cp "$lib" dist/
+            fi
+          done
+          [ -f dist/libsycl.so* ] 2>/dev/null || echo "Warning: libsycl.so not found"
+          
+          for lib in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so; do
+            if [ -f "$lib" ]; then
+              echo "  - Copying $(basename $lib)"
+              cp "$lib" dist/
+            fi
+          done
+          
+          for lib in libOpenCL libsvml libirng libimf libintlc; do
+            for file in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/${lib}.so*; do
+              if [ -f "$file" ]; then
+                echo "  - Copying $(basename $file)"
+                cp "$file" dist/
+              fi
+            done
+          done
+          
+          echo "Packaging Intel MKL libraries..."
+          for lib in libmkl_sycl_blas libmkl_sycl_lapack libmkl_sycl_vm libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_thread libmkl_core libmkl_sycl; do
+            found=false
+            # Search in multiple possible MKL library locations
+            for mkl_path in "${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/intel64" "${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib"; do
+              if [ -d "$mkl_path" ]; then
+                for file in ${mkl_path}/${lib}.so*; do
+                  if [ -f "$file" ]; then
+                    echo "  - Copying $(basename $file)"
+                    cp "$file" dist/
+                    found=true
+                  fi
+                done
+              fi
+            done
+            if [ "$found" = "false" ]; then
+              echo "Warning: ${lib}.so not found"
+            fi
+          done
+          
+          echo "Packaging Intel TBB (Threading Building Blocks) libraries..."
+          for lib in libtbb libtbb12 libtbbmalloc; do
+            found=false
+            # Search in multiple possible TBB locations
+            for tbb_path in "${{ env.ONEAPI_INSTALL_PATH }}/tbb/latest/lib/intel64/gcc4.8" "${{ env.ONEAPI_INSTALL_PATH }}/tbb/latest/lib"; do
+              if [ -d "$tbb_path" ]; then
+                for file in ${tbb_path}/${lib}.so*; do
+                  if [ -f "$file" ]; then
+                    echo "  - Copying $(basename $file)"
+                    cp "$file" dist/
+                    found=true
+                  fi
+                done
+              fi
+            done
+            if [ "$found" = "false" ]; then
+              echo "Warning: ${lib}.so not found (may not be required)"
+            fi
+          done
+          
+          echo "Packaging Unified Runtime libraries..."
+          for lib in libur_loader; do
+            found=false
+            for file in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/${lib}.so*; do
+              if [ -f "$file" ]; then
+                echo "  - Copying $(basename $file)"
+                cp "$file" dist/
+                found=true
+              fi
+            done
+            if [ "$found" = "false" ]; then
+              echo "Warning: ${lib}.so not found (may not be required)"
+            fi
+          done
+          
+          # Create README with usage instructions
+          cat > dist/README.txt << 'EOF'
+          whisper.cpp - Ubuntu Intel GPU Build
+          =====================================
+          
+          This package includes Intel oneAPI SYCL runtime libraries, Intel MKL libraries,
+          Intel TBB (Threading Building Blocks), and Unified Runtime libraries.
+          The binaries are built with RPATH set to $ORIGIN, so they should
+          automatically find the shared libraries in the same directory.
+          
+          To run:
+            ./whisper-cli [options]
+          
+          If you encounter library loading errors, you can explicitly set:
+            export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+            ./whisper-cli [options]
+          
+          Alternatively, if you have Intel oneAPI installed, source the environment:
+            source /opt/intel/oneapi/setvars.sh
+            ./whisper-cli [options]
+          
+          For more information, visit: https://github.com/ggerganov/whisper.cpp
+          EOF
+          
+          pushd dist
+          # Package all files - executables, shared libraries, and README
+          if ls *.so* 1> /dev/null 2>&1; then
+            zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so* README.txt
+          else
+            echo "Warning: No shared libraries found to package"
+            zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench README.txt
+          fi
+          popd
+
+      - name: Upload whisper-cli package
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+
+
+  windows-build-intelgpu:
+    needs: determine-tag
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.run_type == 'full-ci' || github.event.inputs.run_type == 'release-only' }}
+    name: Windows x64 (IntelGPU)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+
+    runs-on: windows-latest
+    
+    env:
+      # Standard Intel oneAPI installation directory on Windows (oneAPI 2025.0)
+      # Update this path if Intel changes their default installation location
+      ONEAPI_INSTALL_PATH: C:\Program Files (x86)\Intel\oneAPI
+      # oneAPI version for cache key - update when upgrading oneAPI
+      ONEAPI_VERSION: "2025.0"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Cache Intel oneAPI
+        id: cache-oneapi
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ONEAPI_INSTALL_PATH }}
+          # Cache key includes oneAPI version only - cache is shared across branches
+          key: ${{ runner.os }}-oneapi-${{ env.ONEAPI_VERSION }}
+
+      - name: Check oneAPI cache status
+        shell: powershell
+        run: |
+          $cacheHit = '${{ steps.cache-oneapi.outputs.cache-hit }}'
+          if ($cacheHit -eq 'true') {
+            Write-Host "oneAPI cache hit - using cached installation"
+            Write-Host "Installation time saved: ~20 minutes"
+          } else {
+            Write-Host "oneAPI cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 15-20 minutes"
+          }
+
+      - name: Install Intel oneAPI Base Toolkit
+        if: steps.cache-oneapi.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Write-Host "Installing Intel oneAPI Base Toolkit..."
+          Write-Host "Note: This installation will be cached for subsequent workflow runs."
+          
+          # Install via winget - most reliable method
+          # The installation is cached, so this only runs once
+          winget install `
+            --id Intel.oneAPI.BaseToolkit `
+            --accept-package-agreements `
+            --accept-source-agreements `
+            --silent `
+            --log "$env:TEMP\oneapi_install.log"
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "✗ Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host "Check log at: $env:TEMP\oneapi_install.log"
+            Write-Host ""
+            Write-Host "Installation failed and cannot continue."
+            exit 1
+          } else {
+            Write-Host "Installation completed successfully"
+          }
+
+      - name: Set oneAPI environment variables and verify installation
+        shell: powershell
+        run: |
+          echo "ONEAPI_ROOT=$env:ONEAPI_INSTALL_PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          
+          # Verify essential components are present
+          $setvarsPath = Join-Path $env:ONEAPI_INSTALL_PATH "setvars.bat"
+          $compilerPath = Join-Path $env:ONEAPI_INSTALL_PATH "compiler"
+          
+          $installValid = $true
+          
+          if (-not (Test-Path $env:ONEAPI_INSTALL_PATH)) {
+            Write-Host "✗ Error: oneAPI installation directory not found at: $env:ONEAPI_INSTALL_PATH"
+            $installValid = $false
+          } elseif (-not (Test-Path $setvarsPath)) {
+            Write-Host "✗ Error: setvars.bat not found - oneAPI installation may be incomplete"
+            $installValid = $false
+          } elseif (-not (Test-Path $compilerPath)) {
+            Write-Host "✗ Error: Compiler directory not found - oneAPI installation may be incomplete"
+            $installValid = $false
+          } else {
+            Write-Host "✓ oneAPI installation verified at: $env:ONEAPI_INSTALL_PATH"
+            Write-Host "✓ Essential components found (setvars.bat, compiler)"
+          }
+          
+          if (-not $installValid) {
+            Write-Host ""
+            Write-Host "Installation validation failed. The build will likely fail."
+            Write-Host "This can happen if:"
+            Write-Host "  1. Installation was interrupted or incomplete"
+            Write-Host "  2. Cache was corrupted"
+            Write-Host "  3. Disk space ran out during installation"
+            Write-Host ""
+            Write-Host "To fix: Manually invalidate the cache and re-run the workflow"
+            exit 1
+          }
+
+      - name: Configure (Intel GPU)
+        shell: cmd
+        run: |
+          call "%ONEAPI_ROOT%\setvars.bat"
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_C_COMPILER=icx ^
+            -DCMAKE_CXX_COMPILER=icx ^
+            -DGGML_AVX512=ON ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
+            -DGGML_SYCL=ON ^
+            -DGGML_SYCL_F16=ON ^
+            -DWHISPER_SYCL=ON ^
+            -DWHISPER_SYCL_F16=ON ^
+            -DWHISPER_SDL2=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF ^
+            -DWHISPER_BUILD_EXAMPLES=ON ^
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build (Intel GPU)
+        shell: cmd
+        run: |
+          call "%ONEAPI_ROOT%\setvars.bat"
+          cmake --build build --config Release -- -v
+
+      - name: Package whisper-cli and whisper-bench (Windows ${{ matrix.arch }} IntelGPU)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        shell: powershell
+        run: |
+          # Create dist directory
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          
+          # Copy executables and build DLLs
+          Copy-Item build\bin\whisper-cli.exe dist\
+          Copy-Item build\bin\whisper-bench.exe dist\
+          if (Test-Path "build\bin\*.dll") {
+            Copy-Item build\bin\*.dll dist\
+          }
+          
+          # Copy Intel oneAPI runtime DLLs required for execution
+          # Core compiler runtime DLLs
+          $coreDlls = @(
+            'svml_dispmd.dll',
+            'libmmd.dll',
+            'libiomp5md.dll'
+          )
+          
+          # SYCL runtime DLLs (try multiple versions for compatibility)
+          $syclDlls = @(
+            'sycl.dll',
+            'sycl7.dll',
+            'sycl8.dll'
+          )
+          
+          # oneDNN DLLs
+          $dnnlDlls = @(
+            'dnnl.dll',
+            'dnnld.dll'
+          )
+          
+          # MKL SYCL DLLs (essential for SYCL math operations)
+          $mklSyclDlls = @(
+            'mkl_sycl_blas.5.dll',
+            'mkl_sycl_lapack.5.dll',
+            'mkl_sycl_vm.5.dll',
+            'mkl_core.2.dll',
+            'mkl_intel_thread.2.dll',
+            'mkl_tbb_thread.2.dll'
+          )
+          
+          # Unified Runtime and TBB DLLs (required for oneAPI 2024.x and newer)
+          # ur_win_proxy_loader.dll - Unified Runtime proxy loader for SYCL
+          # tbb12.dll - Threading Building Blocks version 12
+          $urTbbDlls = @(
+            'ur_win_proxy_loader.dll',
+            'tbb12.dll'
+          )
+          
+          # Combine all DLL lists
+          $dllsToCopy = $coreDlls + $syclDlls + $dnnlDlls + $mklSyclDlls + $urTbbDlls
+          
+          # Search multiple locations for DLLs
+          $dllLocations = @(
+            "$env:ONEAPI_ROOT\compiler\latest\bin",
+            "$env:ONEAPI_ROOT\compiler\latest\windows\bin",
+            "$env:ONEAPI_ROOT\dnnl\latest\bin",
+            "$env:ONEAPI_ROOT\mkl\latest\bin",
+            "$env:ONEAPI_ROOT\mkl\latest\redist\intel64",
+            "$env:ONEAPI_ROOT\tbb\latest\redist\intel64\vc_mt",
+            "$env:ONEAPI_ROOT\tbb\latest\bin"
+          )
+          
+          foreach ($dll in $dllsToCopy) {
+            $found = $false
+            foreach ($location in $dllLocations) {
+              if (Test-Path $location) {
+                $sourcePath = Join-Path $location $dll
+                if (Test-Path $sourcePath) {
+                  Copy-Item $sourcePath dist\
+                  Write-Host "Copied $dll from $location"
+                  $found = $true
+                  break
+                }
+              }
+            }
+            if (-not $found) {
+              Write-Host "Warning: $dll not found in any location"
+            }
+          }
+          
+          # Copy PI (Plugin Interface) DLLs - these may be in bin or bin\plugins
+          $piLocations = @(
+            "$env:ONEAPI_ROOT\compiler\latest\bin",
+            "$env:ONEAPI_ROOT\compiler\latest\bin\plugins",
+            "$env:ONEAPI_ROOT\compiler\latest\windows\bin",
+            "$env:ONEAPI_ROOT\compiler\latest\windows\bin\plugins"
+          )
+          
+          $piDlls = @('pi_level_zero.dll', 'pi_opencl.dll', 'pi_cuda.dll', 'pi_hip.dll')
+          $piCopied = 0
+          
+          foreach ($location in $piLocations) {
+            if (Test-Path $location) {
+              foreach ($piDll in $piDlls) {
+                $piPath = Join-Path $location $piDll
+                $destPath = Join-Path "dist" $piDll
+                if ((Test-Path $piPath) -and -not (Test-Path $destPath)) {
+                  Copy-Item $piPath dist\
+                  Write-Host "Copied $piDll from $location"
+                  $piCopied++
+                }
+              }
+            }
+          }
+          
+          if ($piCopied -eq 0) {
+            Write-Host "Warning: No PI plugin DLLs found"
+          } else {
+            Write-Host "Copied $piCopied PI plugin DLLs"
+          }
+          
+          # Create zip package
+          Push-Location dist
+          $filesToZip = @(Get-ChildItem -Path "*.exe" -Name)
+          if (Test-Path "*.dll") {
+            $filesToZip += @(Get-ChildItem -Path "*.dll" -Name)
+          }
+          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip $filesToZip
+          Pop-Location
+          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip dist\
+
+      - name: Upload whisper-cli package (Windows ${{ matrix.arch }} IntelGPU)
+        if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-windows-${{ matrix.arch }}-intelgpu
+          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-intelgpu.zip
+
+  create-release:
+    if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
+    needs: [determine-tag, ubuntu-build-oneapi-x64, windows-build-intelgpu]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download whisper-cli packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: whisper-cli-*
+          path: release
+          merge-multiple: true
+
+      # Full packages are available as workflow artifacts but excluded from releases to reduce size
+      # Uncomment below to include full packages (with all examples) in releases
+      # - name: Download full packages
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     pattern: whisper.cpp-full-*
+      #     path: release
+      #     merge-multiple: true
+
+      - name: Display package sizes
+        run: |
+          echo "📦 Package Sizes:"
+          echo "===================="
+          cd release
+          
+          # Check if any zip files exist
+          if ! ls *.zip >/dev/null 2>&1; then
+            echo "No package files found"
+            exit 0
+          fi
+          
+          # Display each package with human-readable size
+          # Use awk to safely handle large file sizes and avoid integer overflow
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              size_bytes=$(stat -c %s "$file" 2>/dev/null)
+              if [ -n "$size_bytes" ]; then
+                size_info=$(awk -v size="$size_bytes" 'BEGIN {
+                  mb = size / 1048576
+                  if (mb >= 1024) {
+                    gb = mb / 1024
+                    printf "%.2f GB", gb
+                  } else {
+                    printf "%.2f MB", mb
+                  }
+                }')
+                echo "  • $file: $size_info"
+              else
+                echo "  • $file: Unable to determine size"
+              fi
+            fi
+          done
+          
+          # Calculate and display total size
+          total_size=$(find . -name "*.zip" -type f -exec stat -c %s {} + 2>/dev/null | awk '{sum += $1} END {print sum}')
+          if [ -n "$total_size" ] && [ "$total_size" -gt 0 ]; then
+            total_info=$(awk -v size="$total_size" 'BEGIN {
+              mb = size / 1048576
+              if (mb >= 1024) {
+                gb = mb / 1024
+                printf "%.2f GB", gb
+              } else {
+                printf "%.2f MB", mb
+              }
+            }')
+            echo "===================="
+            echo "Total: $total_info"
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.determine-tag.outputs.tag_name }}
+          files: |
+            release/*
+          generate_release_notes: true
+          prerelease: ${{ github.ref_type != 'tag' }}
