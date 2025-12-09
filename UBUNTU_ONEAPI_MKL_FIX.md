@@ -74,7 +74,9 @@ The MKL SYCL BLAS library has dependencies on other MKL libraries. The whisper.c
 - `libmkl_tbb_thread.so.2` - Multi-threaded execution layer (TBB-based)
 - `libmkl_sycl.so` - General SYCL support library
 
-Note: This build configuration uses the ILP64 interface and threaded execution. Alternative variants like `libmkl_intel_lp64.so` (LP64 interface) or `libmkl_sequential.so` (sequential execution) are not used in this configuration. Both OpenMP-based (`libmkl_intel_thread`) and TBB-based (`libmkl_tbb_thread`) threading libraries are required for full compatibility with newer oneAPI versions.
+Note: This build configuration uses the ILP64 interface and threaded execution. Alternative variants like `libmkl_intel_lp64.so` (LP64 interface) or `libmkl_sequential.so` (sequential execution) are not used in this configuration.
+
+Both OpenMP-based (`libmkl_intel_thread`) and TBB-based (`libmkl_tbb_thread`) threading libraries are required for full compatibility with newer oneAPI versions.
 
 All of these must be present in the distribution for the binary to run.
 
