@@ -26,7 +26,8 @@ endif()
 The build workflow installed `intel-oneapi-mkl-devel` which includes:
 - `libmkl_sycl_blas.so*` - SYCL BLAS interface library (the primary missing library)
 - `libmkl_intel_ilp64.so*` - MKL core library with ILP64 interface
-- `libmkl_intel_thread.so*` - Threading layer for parallel operations
+- `libmkl_intel_thread.so*` - Threading layer for parallel operations (OpenMP-based)
+- `libmkl_tbb_thread.so*` - Threading layer for parallel operations (TBB-based)
 - `libmkl_core.so*` - Core MKL computational library
 - `libmkl_sycl.so*` - General SYCL support in MKL
 
@@ -36,16 +37,23 @@ However, the packaging step in `.github/workflows/build.yml` was only copying SY
 
 ### Changes to `.github/workflows/build.yml`
 
-Added lines 493-499 in the "Package whisper-cli and whisper-bench (Ubuntu)" step:
+Updated lines 511-524 in the "Package whisper-cli and whisper-bench (Ubuntu)" step to include all required MKL libraries:
 
-```yaml
-# Copy Intel MKL libraries required for SYCL BLAS operations
-# These libraries are linked via MKL::MKL_SYCL::BLAS in CMakeLists.txt
-cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_sycl_blas.so* dist/ 2>/dev/null || echo "Warning: libmkl_sycl_blas.so not found"
-cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_intel_ilp64.so* dist/ 2>/dev/null || echo "Warning: libmkl_intel_ilp64.so not found"
-cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_intel_thread.so* dist/ 2>/dev/null || echo "Warning: libmkl_intel_thread.so not found"
-cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_core.so* dist/ 2>/dev/null || echo "Warning: libmkl_core.so not found"
-cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_sycl.so* dist/ 2>/dev/null || true
+```bash
+echo "Packaging Intel MKL libraries..."
+for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_thread libmkl_core libmkl_sycl; do
+  found=false
+  for file in ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/${lib}.so*; do
+    if [ -f "$file" ]; then
+      echo "  - Copying $(basename $file)"
+      cp "$file" dist/
+      found=true
+    fi
+  done
+  if [ "$found" = "false" ]; then
+    echo "Warning: ${lib}.so not found"
+  fi
+done
 ```
 
 ### Updated README
@@ -62,10 +70,13 @@ The MKL SYCL BLAS library has dependencies on other MKL libraries. The whisper.c
 - `libmkl_sycl_blas.so.5` - Main SYCL BLAS interface
 - `libmkl_core.so` - Core MKL computational routines
 - `libmkl_intel_ilp64.so` - ILP64 interface (64-bit integers for large data)
-- `libmkl_intel_thread.so` - Multi-threaded execution layer
+- `libmkl_intel_thread.so` - Multi-threaded execution layer (OpenMP-based)
+- `libmkl_tbb_thread.so.2` - Multi-threaded execution layer (TBB-based)
 - `libmkl_sycl.so` - General SYCL support library
 
 Note: This build configuration uses the ILP64 interface and threaded execution. Alternative variants like `libmkl_intel_lp64.so` (LP64 interface) or `libmkl_sequential.so` (sequential execution) are not used in this configuration.
+
+Both OpenMP-based (`libmkl_intel_thread`) and TBB-based (`libmkl_tbb_thread`) threading libraries are required for full compatibility with newer oneAPI versions.
 
 All of these must be present in the distribution for the binary to run.
 
