@@ -496,7 +496,7 @@ jobs:
           cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_intel_ilp64.so* dist/ 2>/dev/null || echo "Warning: libmkl_intel_ilp64.so not found"
           cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_intel_thread.so* dist/ 2>/dev/null || echo "Warning: libmkl_intel_thread.so not found"
           cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_core.so* dist/ 2>/dev/null || echo "Warning: libmkl_core.so not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_sycl.so* dist/ 2>/dev/null || true
+          cp ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/libmkl_sycl.so* dist/ 2>/dev/null || echo "Warning: libmkl_sycl.so not found"
           
           # Create README with usage instructions
           cat > dist/README.txt << 'EOF'

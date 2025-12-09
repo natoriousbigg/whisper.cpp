@@ -58,11 +58,14 @@ This package includes Intel oneAPI SYCL runtime libraries and Intel MKL librarie
 ## Technical Details
 
 ### Library Dependencies
-The MKL SYCL BLAS library has dependencies on other MKL libraries:
-- `libmkl_sycl_blas.so.5` depends on:
-  - `libmkl_core.so`
-  - `libmkl_intel_ilp64.so` or `libmkl_intel_lp64.so`
-  - `libmkl_intel_thread.so` or `libmkl_sequential.so`
+The MKL SYCL BLAS library has dependencies on other MKL libraries. The whisper.cpp build uses:
+- `libmkl_sycl_blas.so.5` - Main SYCL BLAS interface
+- `libmkl_core.so` - Core MKL computational routines
+- `libmkl_intel_ilp64.so` - ILP64 interface (64-bit integers for large data)
+- `libmkl_intel_thread.so` - Multi-threaded execution layer
+- `libmkl_sycl.so` - General SYCL support library
+
+Note: This build configuration uses the ILP64 interface and threaded execution. Alternative variants like `libmkl_intel_lp64.so` (LP64 interface) or `libmkl_sequential.so` (sequential execution) are not used in this configuration.
 
 All of these must be present in the distribution for the binary to run.
 
