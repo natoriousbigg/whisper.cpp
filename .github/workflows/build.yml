@@ -523,12 +523,48 @@ jobs:
             fi
           done
           
+          echo "Packaging Intel TBB (Threading Building Blocks) libraries..."
+          for lib in libtbb libtbb12 libtbbmalloc; do
+            found=false
+            # Search in multiple possible TBB locations
+            for tbb_path in "${{ env.ONEAPI_INSTALL_PATH }}/tbb/latest/lib/intel64/gcc4.8" "${{ env.ONEAPI_INSTALL_PATH }}/tbb/latest/lib"; do
+              if [ -d "$tbb_path" ]; then
+                for file in ${tbb_path}/${lib}.so*; do
+                  if [ -f "$file" ]; then
+                    echo "  - Copying $(basename $file)"
+                    cp "$file" dist/
+                    found=true
+                  fi
+                done
+              fi
+            done
+            if [ "$found" = "false" ]; then
+              echo "Warning: ${lib}.so not found (may not be required)"
+            fi
+          done
+          
+          echo "Packaging Unified Runtime libraries..."
+          for lib in libur_loader; do
+            found=false
+            for file in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/${lib}.so*; do
+              if [ -f "$file" ]; then
+                echo "  - Copying $(basename $file)"
+                cp "$file" dist/
+                found=true
+              fi
+            done
+            if [ "$found" = "false" ]; then
+              echo "Warning: ${lib}.so not found (may not be required)"
+            fi
+          done
+          
           # Create README with usage instructions
           cat > dist/README.txt << 'EOF'
           whisper.cpp - Ubuntu Intel GPU Build
           =====================================
           
-          This package includes Intel oneAPI SYCL runtime libraries and Intel MKL libraries.
+          This package includes Intel oneAPI SYCL runtime libraries, Intel MKL libraries,
+          Intel TBB (Threading Building Blocks), and Unified Runtime libraries.
           The binaries are built with RPATH set to $ORIGIN, so they should
           automatically find the shared libraries in the same directory.
           
