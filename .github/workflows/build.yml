@@ -288,11 +288,9 @@ jobs:
           # This is needed because /usr/local requires root to create directories
           # and the cache action runs as the non-root runner user
           CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
-          if [ ! -d "$CUDA_PATH" ]; then
-            sudo mkdir -p "$CUDA_PATH"
-          fi
+          sudo mkdir -p "$CUDA_PATH"
           # Make it writable by the runner user for cache restore
-          sudo chown -R $USER:$USER "$CUDA_PATH"
+          sudo chown -R "$USER:$USER" "$CUDA_PATH"
 
       - name: Cache CUDA Toolkit
         id: cache-cuda
@@ -348,7 +346,7 @@ jobs:
           
           # Change ownership to runner user so the cache action can save the directory
           # (apt-get installs files as root, but cache action needs user permissions)
-          sudo chown -R $USER:$USER /usr/local/cuda-${{ env.CUDA_VERSION }}
+          sudo chown -R "$USER:$USER" "/usr/local/cuda-${{ env.CUDA_VERSION }}"
 
       - name: Set CUDA environment variables
         run: |
