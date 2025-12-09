@@ -509,7 +509,7 @@ jobs:
           done
           
           echo "Packaging Intel MKL libraries..."
-          for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_core libmkl_sycl; do
+          for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_thread libmkl_core libmkl_sycl; do
             found=false
             for file in ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/${lib}.so*; do
               if [ -f "$file" ]; then
