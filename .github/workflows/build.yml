@@ -282,6 +282,18 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Prepare CUDA cache directory
+        run: |
+          # Create the CUDA directory with correct permissions BEFORE cache restore
+          # This is needed because /usr/local requires root to create directories
+          # and the cache action runs as the non-root runner user
+          CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          if [ ! -d "$CUDA_PATH" ]; then
+            sudo mkdir -p "$CUDA_PATH"
+          fi
+          # Make it writable by the runner user for cache restore
+          sudo chown -R $USER:$USER "$CUDA_PATH"
+
       - name: Cache CUDA Toolkit
         id: cache-cuda
         uses: actions/cache@v4
