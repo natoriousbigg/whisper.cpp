@@ -190,10 +190,10 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
             // Support both --detect-language (flag) and --detect-language true/false (with value)
             if ((i + 1) < argc) {
                 const char* next_arg = argv[i + 1];
-                if (strcmp(next_arg, "true") == 0) {
+                if (strcasecmp(next_arg, "true") == 0) {
                     params.detect_language = true;
                     i++; // consume the "true" argument
-                } else if (strcmp(next_arg, "false") == 0) {
+                } else if (strcasecmp(next_arg, "false") == 0) {
                     params.detect_language = false;
                     i++; // consume the "false" argument
                 } else {
