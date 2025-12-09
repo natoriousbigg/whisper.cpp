@@ -186,7 +186,25 @@ static bool whisper_params_parse(int argc, char ** argv, whisper_params & params
         else if (arg == "-pp"   || arg == "--print-progress")       { params.print_progress  = true; }
         else if (arg == "-nt"   || arg == "--no-timestamps")        { params.no_timestamps   = true; }
         else if (arg == "-l"    || arg == "--language")             { params.language        = whisper_param_turn_lowercase(ARGV_NEXT); }
-        else if (arg == "-dl"   || arg == "--detect-language")      { params.detect_language = true; }
+        else if (arg == "-dl"   || arg == "--detect-language")      { 
+            // Support both --detect-language (flag) and --detect-language true/false (with value)
+            if ((i + 1) < argc) {
+                std::string next_arg = argv[i + 1];
+                if (next_arg == "true") {
+                    params.detect_language = true;
+                    i++; // consume the "true" argument
+                } else if (next_arg == "false") {
+                    params.detect_language = false;
+                    i++; // consume the "false" argument
+                } else {
+                    // No valid boolean value follows, treat as flag
+                    params.detect_language = true;
+                }
+            } else {
+                // No argument follows, treat as flag
+                params.detect_language = true;
+            }
+        }
         else if (                  arg == "--prompt")               { params.prompt          = ARGV_NEXT; }
         else if (                  arg == "--carry-initial-prompt") { params.carry_initial_prompt = true; }
         else if (arg == "-m"    || arg == "--model")                { params.model           = ARGV_NEXT; }
@@ -268,6 +286,7 @@ static void whisper_print_usage(int /*argc*/, char ** argv, const whisper_params
     fprintf(stderr, "  -nt,       --no-timestamps        [%-7s] do not print timestamps\n",                        params.no_timestamps ? "true" : "false");
     fprintf(stderr, "  -l LANG,   --language LANG        [%-7s] spoken language ('auto' for auto-detect)\n",       params.language.c_str());
     fprintf(stderr, "  -dl,       --detect-language      [%-7s] exit after automatically detecting language\n",    params.detect_language ? "true" : "false");
+    fprintf(stderr, "             --detect-language BOOL              accepts true/false or use as flag\n");
     fprintf(stderr, "             --prompt PROMPT        [%-7s] initial prompt (max n_text_ctx/2 tokens)\n",       params.prompt.c_str());
     fprintf(stderr, "             --carry-initial-prompt [%-7s] always prepend initial prompt\n",                  params.carry_initial_prompt ? "true" : "false");
     fprintf(stderr, "  -m FNAME,  --model FNAME          [%-7s] model path\n",                                     params.model.c_str());
