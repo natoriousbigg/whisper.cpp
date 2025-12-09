@@ -950,17 +950,113 @@ namespace dpct
                     throw std::runtime_error("invalid device filter: " + std::string(env));
                 }
             } else {
-                auto default_device = sycl::device(sycl::default_selector_v);
-                auto default_platform_name = default_device.get_platform().get_info<sycl::info::platform::name>();
+                // Try to get default device, but handle failure gracefully
+                try {
+                    auto default_device = sycl::device(sycl::default_selector_v);
+                    auto default_platform_name = default_device.get_platform().get_info<sycl::info::platform::name>();
 
-                if (std::strstr(default_platform_name.c_str(), "Level-Zero") || default_device.is_cpu()) {
-                    filter = "level-zero";
-                }
-                else if (std::strstr(default_platform_name.c_str(), "CUDA")) {
-                    filter = "cuda";
-                }
-                else if (std::strstr(default_platform_name.c_str(), "HIP")) {
-                    filter = "hip";
+                    if (std::strstr(default_platform_name.c_str(), "Level-Zero") || default_device.is_cpu()) {
+                        filter = "level-zero";
+                    }
+                    else if (std::strstr(default_platform_name.c_str(), "CUDA")) {
+                        filter = "cuda";
+                    }
+                    else if (std::strstr(default_platform_name.c_str(), "HIP")) {
+                        filter = "hip";
+                    }
+                    else {
+                        // Fallback to opencl if platform not recognized
+                        filter = "opencl";
+                    }
+                } catch (const sycl::exception& e) {
+                    // If default_selector fails, try to find any GPU with priority:
+                    // 1. Level-Zero GPU (best for Intel)
+                    // 2. OpenCL GPU (fallback)
+                    // 3. Other GPU backends
+                    std::cerr << "Warning: default device selector failed (" << e.what() 
+                              << "), trying alternative device selection" << std::endl;
+                    
+                    auto platform_list = sycl::platform::get_platforms();
+                    bool found_gpu = false;
+                    
+                    // First try to find Level-Zero GPU
+                    for (const auto& platform : platform_list) {
+                        auto platform_name = platform.get_info<sycl::info::platform::name>();
+                        std::string platform_name_low = platform_name;
+                        std::transform(platform_name_low.begin(), platform_name_low.end(), 
+                                     platform_name_low.begin(), ::tolower);
+                        
+                        if (platform_name_low.find("level-zero") != std::string::npos) {
+                            auto devices = platform.get_devices();
+                            for (const auto& dev : devices) {
+                                if (dev.is_gpu()) {
+                                    filter = "level-zero";
+                                    found_gpu = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (found_gpu) break;
+                    }
+                    
+                    // If no Level-Zero GPU found, try OpenCL GPU
+                    if (!found_gpu) {
+                        for (const auto& platform : platform_list) {
+                            auto platform_name = platform.get_info<sycl::info::platform::name>();
+                            std::string platform_name_low = platform_name;
+                            std::transform(platform_name_low.begin(), platform_name_low.end(), 
+                                         platform_name_low.begin(), ::tolower);
+                            
+                            if (platform_name_low.find("opencl") != std::string::npos) {
+                                auto devices = platform.get_devices();
+                                for (const auto& dev : devices) {
+                                    if (dev.is_gpu()) {
+                                        filter = "opencl";
+                                        found_gpu = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (found_gpu) break;
+                        }
+                    }
+                    
+                    // Last resort: try any GPU
+                    if (!found_gpu) {
+                        for (const auto& platform : platform_list) {
+                            auto devices = platform.get_devices();
+                            for (const auto& dev : devices) {
+                                if (dev.is_gpu()) {
+                                    auto platform_name = platform.get_info<sycl::info::platform::name>();
+                                    std::string platform_name_low = platform_name;
+                                    std::transform(platform_name_low.begin(), platform_name_low.end(), 
+                                                 platform_name_low.begin(), ::tolower);
+                                    
+                                    if (platform_name_low.find("cuda") != std::string::npos) {
+                                        filter = "cuda";
+                                    } else if (platform_name_low.find("hip") != std::string::npos) {
+                                        filter = "hip";
+                                    } else {
+                                        filter = "opencl"; // Default fallback
+                                    }
+                                    found_gpu = true;
+                                    break;
+                                }
+                            }
+                            if (found_gpu) break;
+                        }
+                    }
+                    
+                    if (!found_gpu) {
+                        throw std::runtime_error(
+                            "No GPU devices found. Please check:\n"
+                            "  1. Intel GPU drivers are installed: https://dgpu-docs.intel.com/driver/installation.html\n"
+                            "  2. User is in 'video' and 'render' groups: sudo usermod -aG render $USER && sudo usermod -aG video $USER\n"
+                            "  3. clinfo shows OpenCL devices: clinfo -l\n"
+                            "  4. sycl-ls shows devices: source /opt/intel/oneapi/setvars.sh && sycl-ls\n"
+                            "  5. Try setting ONEAPI_DEVICE_SELECTOR=opencl:gpu or ONEAPI_DEVICE_SELECTOR=level_zero:gpu"
+                        );
+                    }
                 }
             }
 
@@ -1052,15 +1148,25 @@ namespace dpct
         }
         dev_mgr()
         {
-            sycl::device default_device =
-                sycl::device(sycl::default_selector_v);
-            _devs.push_back(std::make_shared<device_ext>(default_device));
+            sycl::device default_device;
+            bool default_device_found = false;
+            
+            // Try to get default device, but handle failure gracefully
+            try {
+                default_device = sycl::device(sycl::default_selector_v);
+                default_device_found = true;
+                _devs.push_back(std::make_shared<device_ext>(default_device));
+                
+                // Collect other devices except for the default device.
+                if (default_device.is_cpu())
+                    _cpu_device = 0;
+            } catch (const sycl::exception& e) {
+                // If default_selector fails, we'll populate devices later
+                std::cerr << "Warning: default device selector failed (" << e.what() 
+                          << "), will enumerate all available devices" << std::endl;
+            }
 
             std::vector<sycl::device> sycl_all_devs;
-            // Collect other devices except for the default device.
-            if (default_device.is_cpu())
-                _cpu_device = 0;
-
             auto Platforms = sycl::platform::get_platforms();
             // Keep track of the number of devices per backend
             std::map<sycl::backend, size_t> DeviceNums;
@@ -1097,7 +1203,8 @@ namespace dpct
 
             for (auto &dev : sycl_all_devs)
             {
-                if (dev == default_device)
+                // Only skip if we found a default device and it matches
+                if (default_device_found && dev == default_device)
                 {
                     continue;
                 }
