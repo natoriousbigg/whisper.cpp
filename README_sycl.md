@@ -229,6 +229,21 @@ Using device **0** (Intel(R) Arc(TM) A770 Graphics) as main device
 
 ## Known Issue
 
+- Error: `terminate called after throwing an instance of 'sycl::_V1::exception' what(): No device of requested type available`
+
+  This error occurs when the SYCL runtime cannot find a suitable GPU device using its default selector. This can happen if:
+  - The Level-Zero driver is not properly configured
+  - The GPU is not recognized by the default device selector
+  - User permissions are incorrect
+
+  **Solutions:**
+  1. Verify GPU drivers are installed: Check with `clinfo -l` (should show your GPU)
+  2. Verify SYCL can see devices: Run `source /opt/intel/oneapi/setvars.sh && sycl-ls` (should list devices)
+  3. Add user to required groups: `sudo usermod -aG render $USER && sudo usermod -aG video $USER` (logout/login required)
+  4. Try specifying device selector explicitly: Set environment variable `ONEAPI_DEVICE_SELECTOR=opencl:gpu` or `ONEAPI_DEVICE_SELECTOR=level_zero:gpu`
+
+  If none of the above work, the code now includes fallback logic to automatically try alternative device selection methods (Level-Zero, OpenCL) when the default selector fails.
+
 - Error:  `error while loading shared libraries: libsycl.so.X: cannot open shared object file: No such file or directory`.
   
   Or: `error while loading shared libraries: libmkl_sycl_blas.so.5: cannot open shared object file: No such file or directory`.
