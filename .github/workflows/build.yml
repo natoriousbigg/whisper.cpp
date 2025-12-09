@@ -462,12 +462,13 @@ jobs:
       - name: Set RPATH on binaries
         run: |
           # Set RPATH to $ORIGIN so binaries look for libraries in the same directory
-          for binary in whisper-cli whisper-bench; do
+          binaries="whisper-cli whisper-bench"
+          for binary in $binaries; do
             patchelf --set-rpath '$ORIGIN' build/bin/$binary
           done
           
           # Verify RPATH is set correctly
-          for binary in whisper-cli whisper-bench; do
+          for binary in $binaries; do
             echo "Verifying RPATH for $binary:"
             patchelf --print-rpath build/bin/$binary
           done
