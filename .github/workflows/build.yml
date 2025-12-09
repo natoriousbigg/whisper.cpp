@@ -499,7 +499,13 @@ jobs:
           EOF
           
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so* README.txt
+          # Package all files - executables, shared libraries, and README
+          if ls *.so* 1> /dev/null 2>&1; then
+            zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench *.so* README.txt
+          else
+            echo "Warning: No shared libraries found to package"
+            zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench README.txt
+          fi
           popd
 
       - name: Upload whisper-cli package
