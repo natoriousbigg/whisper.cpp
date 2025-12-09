@@ -462,14 +462,15 @@ jobs:
       - name: Set RPATH on binaries
         run: |
           # Set RPATH to $ORIGIN so binaries look for libraries in the same directory
-          patchelf --set-rpath '$ORIGIN' build/bin/whisper-cli
-          patchelf --set-rpath '$ORIGIN' build/bin/whisper-bench
+          for binary in whisper-cli whisper-bench; do
+            patchelf --set-rpath '$ORIGIN' build/bin/$binary
+          done
           
           # Verify RPATH is set correctly
-          echo "Verifying RPATH for whisper-cli:"
-          patchelf --print-rpath build/bin/whisper-cli
-          echo "Verifying RPATH for whisper-bench:"
-          patchelf --print-rpath build/bin/whisper-bench
+          for binary in whisper-cli whisper-bench; do
+            echo "Verifying RPATH for $binary:"
+            patchelf --print-rpath build/bin/$binary
+          done
 
       - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}

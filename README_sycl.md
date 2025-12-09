@@ -237,7 +237,9 @@ Using device **0** (Intel(R) Arc(TM) A770 Graphics) as main device
   
      Install oneAPI base toolkit and enable it by: `source /opt/intel/oneapi/setvars.sh`.
   
-  2. Using pre-built Ubuntu binary package: The package includes the required SYCL runtime libraries. The binaries are built with RPATH set to `$ORIGIN`, which means they should automatically find the libraries in the same directory. If you still encounter this error:
+  2. Using pre-built Ubuntu binary package: The package includes the required SYCL runtime libraries. 
+     The binaries are built with RPATH set to `$ORIGIN`, which means they should automatically find 
+     the libraries in the same directory. If you still encounter this error:
      - Make sure all the `.so` files from the package are in the same directory as the executable
      - Try setting: `export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH` before running
      - Check that the RPATH is set correctly: `patchelf --print-rpath ./whisper-cli`
