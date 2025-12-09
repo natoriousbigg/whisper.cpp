@@ -126,7 +126,7 @@ jobs:
       BLAS_PACKAGE: ""
       PACKAGE_SUFFIX: "-vulkan"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON"
-      VULKAN_SDK_VERSION: "1.3.283.0"
+      VULKAN_SDK_VERSION: "1.4.328.1"
 
     steps:
       - name: Clone
