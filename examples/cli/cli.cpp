@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <cstdio>
 #include <string>
@@ -130,8 +131,14 @@ static char * requires_value_error(const std::string & arg) {
 
 // Helper function to parse optional boolean value from command line
 // Checks if the next argument is a boolean value (true/false/1/0) and consumes it if so.
-// Returns true if a boolean argument was consumed, false otherwise.
-// The boolean value is stored in the 'param' parameter.
+// Arguments:
+//   i: current argument index (will be incremented if a boolean value is consumed)
+//   argc: total number of arguments
+//   argv: argument array
+//   param: output parameter where the boolean value is stored
+// Returns:
+//   true if the next argument was a boolean value and was consumed
+//   false if no argument was consumed (sets param to true by default)
 static bool parse_optional_bool(int & i, int argc, char ** argv, bool & param) {
     if (i + 1 < argc) {
         std::string next_arg = argv[i + 1];
