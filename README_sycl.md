@@ -229,11 +229,20 @@ Using device **0** (Intel(R) Arc(TM) A770 Graphics) as main device
 
 ## Known Issue
 
-- Error:  `error while loading shared libraries: libsycl.so.7: cannot open shared object file: No such file or directory`.
+- Error:  `error while loading shared libraries: libsycl.so.X: cannot open shared object file: No such file or directory`.
 
-  Miss to enable oneAPI running environment.
-
-  Install oneAPI base toolkit and enable it by: `source /opt/intel/oneapi/setvars.sh`.
+  This can happen if:
+  
+  1. Building from source: You need to enable oneAPI running environment before running.
+  
+     Install oneAPI base toolkit and enable it by: `source /opt/intel/oneapi/setvars.sh`.
+  
+  2. Using pre-built Ubuntu binary package: The package includes the required SYCL runtime 
+     libraries. The binaries are built with RPATH set to `$ORIGIN`, which means they should 
+     automatically find the libraries in the same directory. If you still encounter this error:
+     - Make sure all the `.so` files from the package are in the same directory as the executable
+     - Try setting: `export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH` before running
+     - Check that the RPATH is set correctly: `patchelf --print-rpath ./whisper-cli`
 
 
 - Hang during startup

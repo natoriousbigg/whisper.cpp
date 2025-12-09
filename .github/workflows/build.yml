@@ -430,7 +430,7 @@ jobs:
           sudo dpkg --add-architecture ${DEB_ARCH}
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build pkg-config \
-            libsdl2-dev:${DEB_ARCH}
+            libsdl2-dev:${DEB_ARCH} patchelf
 
       - name: Configure (Intel GPU)
         run: |
@@ -439,8 +439,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=icx \
             -DCMAKE_CXX_COMPILER=icpx \
-            -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
+            -DCMAKE_BUILD_RPATH='$ORIGIN' \
             -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DCMAKE_SKIP_BUILD_RPATH=OFF \
             -DGGML_AVX512=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_STATIC=ON \
@@ -457,6 +458,20 @@ jobs:
         run: |
           source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
           cmake --build build --config Release -j $(nproc)
+
+      - name: Set RPATH on binaries
+        run: |
+          # Set RPATH to $ORIGIN so binaries look for libraries in the same directory
+          binaries="whisper-cli whisper-bench"
+          for binary in $binaries; do
+            patchelf --set-rpath '$ORIGIN' build/bin/$binary
+          done
+          
+          # Verify RPATH is set correctly
+          for binary in $binaries; do
+            echo "Verifying RPATH for $binary:"
+            patchelf --print-rpath build/bin/$binary
+          done
 
       - name: Package whisper-cli and whisper-bench (Ubuntu)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
