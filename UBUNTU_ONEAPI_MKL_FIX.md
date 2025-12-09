@@ -37,17 +37,22 @@ However, the packaging step in `.github/workflows/build.yml` was only copying SY
 
 ### Changes to `.github/workflows/build.yml`
 
-Updated lines 511-524 in the "Package whisper-cli and whisper-bench (Ubuntu)" step to include all required MKL libraries:
+Updated lines 511-529 in the "Package whisper-cli and whisper-bench (Ubuntu)" step to include all required MKL libraries and search in the correct directory path (`mkl/latest/lib/intel64/`):
 
 ```bash
 echo "Packaging Intel MKL libraries..."
 for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_thread libmkl_core libmkl_sycl; do
   found=false
-  for file in ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/${lib}.so*; do
-    if [ -f "$file" ]; then
-      echo "  - Copying $(basename $file)"
-      cp "$file" dist/
-      found=true
+  # Search in multiple possible MKL library locations
+  for mkl_path in "${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/intel64" "${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib"; do
+    if [ -d "$mkl_path" ]; then
+      for file in ${mkl_path}/${lib}.so*; do
+        if [ -f "$file" ]; then
+          echo "  - Copying $(basename $file)"
+          cp "$file" dist/
+          found=true
+        fi
+      done
     fi
   done
   if [ "$found" = "false" ]; then
@@ -55,6 +60,8 @@ for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_tbb_th
   fi
 done
 ```
+
+**Key Fix**: The script now searches in `mkl/latest/lib/intel64/` first (where MKL libraries are typically installed on Linux), then falls back to `mkl/latest/lib/` for compatibility. This ensures versioned libraries like `libmkl_core.so.2` are found and packaged correctly.
 
 ### Updated README
 Also updated the README.txt included in the distribution package to mention MKL libraries:
