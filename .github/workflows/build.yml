@@ -126,7 +126,7 @@ jobs:
       BLAS_PACKAGE: ""
       PACKAGE_SUFFIX: "-vulkan"
       EXTRA_CMAKE: "-DWHISPER_SDL2=ON"
-      VULKAN_SDK_VERSION: "1.3.283.0"
+      VULKAN_SDK_VERSION: "1.4.328.1"
 
     steps:
       - name: Clone
@@ -482,20 +482,53 @@ jobs:
           # Copy Intel oneAPI runtime libraries required for execution
           # These libraries are needed to run SYCL-compiled binaries
           source ${{ env.ONEAPI_INSTALL_PATH }}/setvars.sh
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so* dist/ 2>/dev/null || echo "Warning: libsycl.so not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so dist/ 2>/dev/null || echo "Warning: pi libraries not found"
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libOpenCL.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsvml.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libirng.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libimf.so* dist/ 2>/dev/null || true
-          cp ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libintlc.so* dist/ 2>/dev/null || true
+          
+          echo "Packaging Intel oneAPI SYCL runtime libraries..."
+          for lib in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libsycl.so*; do
+            if [ -f "$lib" ]; then
+              echo "  - Copying $(basename $lib)"
+              cp "$lib" dist/
+            fi
+          done
+          [ -f dist/libsycl.so* ] 2>/dev/null || echo "Warning: libsycl.so not found"
+          
+          for lib in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/libpi_*.so; do
+            if [ -f "$lib" ]; then
+              echo "  - Copying $(basename $lib)"
+              cp "$lib" dist/
+            fi
+          done
+          
+          for lib in libOpenCL libsvml libirng libimf libintlc; do
+            for file in ${{ env.ONEAPI_INSTALL_PATH }}/compiler/latest/lib/${lib}.so*; do
+              if [ -f "$file" ]; then
+                echo "  - Copying $(basename $file)"
+                cp "$file" dist/
+              fi
+            done
+          done
+          
+          echo "Packaging Intel MKL libraries..."
+          for lib in libmkl_sycl_blas libmkl_intel_ilp64 libmkl_intel_thread libmkl_core libmkl_sycl; do
+            found=false
+            for file in ${{ env.ONEAPI_INSTALL_PATH }}/mkl/latest/lib/${lib}.so*; do
+              if [ -f "$file" ]; then
+                echo "  - Copying $(basename $file)"
+                cp "$file" dist/
+                found=true
+              fi
+            done
+            if [ "$found" = "false" ]; then
+              echo "Warning: ${lib}.so not found"
+            fi
+          done
           
           # Create README with usage instructions
           cat > dist/README.txt << 'EOF'
           whisper.cpp - Ubuntu Intel GPU Build
           =====================================
           
-          This package includes Intel oneAPI SYCL runtime libraries.
+          This package includes Intel oneAPI SYCL runtime libraries and Intel MKL libraries.
           The binaries are built with RPATH set to $ORIGIN, so they should
           automatically find the shared libraries in the same directory.
           
