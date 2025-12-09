@@ -147,6 +147,17 @@ jobs:
           # Check if Vulkan SDK was restored from cache by verifying the installation exists
           # Note: cache-hit is only 'true' for exact key match, not restore-keys match
           VULKAN_PATH="${{ github.workspace }}/vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64"
+          echo "Checking for Vulkan SDK at: $VULKAN_PATH"
+          echo "Cache hit output: '${{ steps.cache-vulkan.outputs.cache-hit }}'"
+          
+          # Debug: List what's in the vulkan-sdk directory if it exists
+          if [ -d "${{ github.workspace }}/vulkan-sdk" ]; then
+            echo "Contents of vulkan-sdk directory:"
+            ls -la "${{ github.workspace }}/vulkan-sdk" || true
+          else
+            echo "vulkan-sdk directory does not exist"
+          fi
+          
           if [ -d "$VULKAN_PATH" ] && [ -d "$VULKAN_PATH/bin" ]; then
             echo "Vulkan SDK cache restored - using cached installation"
             echo "Installation time saved: ~2-3 minutes"
@@ -286,6 +297,21 @@ jobs:
           # Check if CUDA was restored from cache by verifying the installation exists
           # Note: cache-hit is only 'true' for exact key match, not restore-keys match
           CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          echo "Checking for CUDA at: $CUDA_PATH"
+          echo "Cache hit output: '${{ steps.cache-cuda.outputs.cache-hit }}'"
+          
+          # Debug: List what's in /usr/local if cuda directory exists
+          if [ -d "$CUDA_PATH" ]; then
+            echo "Contents of $CUDA_PATH:"
+            ls -la "$CUDA_PATH" || true
+            if [ -d "$CUDA_PATH/bin" ]; then
+              echo "Contents of $CUDA_PATH/bin:"
+              ls "$CUDA_PATH/bin" | head -10 || true
+            fi
+          else
+            echo "CUDA directory does not exist at $CUDA_PATH"
+          fi
+          
           if [ -d "$CUDA_PATH" ] && [ -f "$CUDA_PATH/bin/nvcc" ]; then
             echo "CUDA cache restored - using cached installation"
             echo "Installation time saved: ~5-10 minutes"
@@ -534,6 +560,17 @@ jobs:
           # Check if Vulkan SDK was restored from cache by verifying the installation exists
           # Note: cache-hit is only 'true' for exact key match, not restore-keys match
           $vulkanPath = "C:\VulkanSDK"
+          Write-Host "Checking for Vulkan SDK at: $vulkanPath"
+          Write-Host "Cache hit output: '${{ steps.cache-vulkan.outputs.cache-hit }}'"
+          
+          # Debug: List what's in the VulkanSDK directory if it exists
+          if (Test-Path $vulkanPath) {
+            Write-Host "Contents of VulkanSDK directory:"
+            Get-ChildItem $vulkanPath | Format-Table -AutoSize
+          } else {
+            Write-Host "VulkanSDK directory does not exist"
+          }
+          
           if ((Test-Path $vulkanPath) -and (Get-ChildItem $vulkanPath -Directory | Where-Object { Test-Path (Join-Path $_.FullName "Bin") })) {
             Write-Host "Vulkan SDK cache restored - using cached installation"
             Write-Host "Installation time saved: ~2-3 minutes"
@@ -710,11 +747,19 @@ jobs:
           $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
           $cacheRestored = $false
           
+          Write-Host "Checking for CUDA at: $cudaBasePath"
+          Write-Host "Cache hit output: '${{ steps.cache-cuda.outputs.cache-hit }}'"
+          
+          # Debug: List what's in the CUDA directory if it exists
           if (Test-Path $cudaBasePath) {
+            Write-Host "Contents of CUDA base directory:"
+            Get-ChildItem $cudaBasePath | Format-Table -AutoSize
+            
             $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^v\d+\.\d+$' }
             if ($installedVersions) {
               foreach ($version in $installedVersions) {
                 $nvccPath = Join-Path $version.FullName "bin\nvcc.exe"
+                Write-Host "Checking for nvcc at: $nvccPath"
                 if (Test-Path $nvccPath) {
                   Write-Host "CUDA cache restored - using cached installation at: $($version.FullName)"
                   Write-Host "Installation time saved: ~10 minutes"
@@ -723,6 +768,8 @@ jobs:
                 }
               }
             }
+          } else {
+            Write-Host "CUDA base directory does not exist"
           }
           
           if (-not $cacheRestored) {
