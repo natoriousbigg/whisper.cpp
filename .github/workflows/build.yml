@@ -331,13 +331,79 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
 
-      - name: Package whisper-cli and whisper-bench (Ubuntu)
+      - name: Package whisper-cli and whisper-bench (Ubuntu CUDA)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         run: |
           mkdir -p dist
+          
+          # Copy executables
           cp build/bin/whisper-cli build/bin/whisper-bench dist/
+          
+          # Copy project shared libraries if they exist
+          if ls build/lib/*.so* 1>/dev/null 2>&1; then
+            echo "Copying project shared libraries from build/lib/"
+            cp -P build/lib/*.so* dist/
+          fi
+          if ls build/bin/*.so* 1>/dev/null 2>&1; then
+            echo "Copying project shared libraries from build/bin/"
+            cp -P build/bin/*.so* dist/
+          fi
+          
+          # Copy essential CUDA runtime shared libraries
+          CUDA_LIB_DIR="/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64"
+          if [ -d "$CUDA_LIB_DIR" ]; then
+            echo "Copying essential CUDA runtime libraries from: $CUDA_LIB_DIR"
+            # Only copy the essential libraries needed for CUDA functionality
+            # These are the Linux equivalents of the Windows CUDA DLLs
+            REQUIRED_LIBS=(
+              "libcublas.so.12"
+              "libcublasLt.so.12"
+              "libcudart.so.12"
+              "libnvrtc.so.12"
+              "libnvblas.so.12"
+            )
+            
+            COPIED_COUNT=0
+            MISSING_LIBS=""
+            for lib in "${REQUIRED_LIBS[@]}"; do
+              # Check if library files exist and copy them with their symlinks
+              if ls "$CUDA_LIB_DIR"/${lib}* 1>/dev/null 2>&1; then
+                cp -P "$CUDA_LIB_DIR"/${lib}* dist/
+                echo "Copied $lib"
+                COPIED_COUNT=$((COPIED_COUNT + 1))
+              else
+                echo "Warning: $lib not found in $CUDA_LIB_DIR"
+                MISSING_LIBS="$MISSING_LIBS $lib"
+              fi
+            done
+            
+            # Also copy nvrtc-builtins if available
+            if ls "$CUDA_LIB_DIR"/libnvrtc-builtins.so* 1>/dev/null 2>&1; then
+              cp -P "$CUDA_LIB_DIR"/libnvrtc-builtins.so* dist/
+              echo "Copied libnvrtc-builtins"
+              COPIED_COUNT=$((COPIED_COUNT + 1))
+            fi
+            
+            if [ $COPIED_COUNT -eq 0 ]; then
+              echo "Error: No required CUDA libraries found"
+              exit 1
+            fi
+            
+            echo "Successfully copied $COPIED_COUNT CUDA libraries"
+            if [ -n "$MISSING_LIBS" ]; then
+              echo "Warning: Some libraries were not found:$MISSING_LIBS"
+            fi
+          else
+            echo "Error: CUDA library directory not found at $CUDA_LIB_DIR"
+            exit 1
+          fi
+          
+          # List all files in dist for verification
+          echo "Package contents:"
+          ls -la dist/
+          
           pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
+          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" *
           popd
 
       - name: Upload whisper-cli package
