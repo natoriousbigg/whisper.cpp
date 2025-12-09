@@ -730,7 +730,12 @@ jobs:
             Write-Host "This will take approximately 10 minutes"
           }
           
-          "cache_restored=$($cacheRestored.ToString().ToLower())" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          # Output consistent format with other cache check steps
+          if ($cacheRestored) {
+            "cache_restored=true" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            "cache_restored=false" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Install CUDA Toolkit
         if: steps.cuda-cache-check.outputs.cache_restored != 'true'
