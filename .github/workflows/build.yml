@@ -1276,7 +1276,7 @@ jobs:
             Write-Host "Copying TBB DLLs from: $tbbPath"
             $tbbDlls = Get-ChildItem "$tbbPath\*.dll" -ErrorAction SilentlyContinue
             if ($tbbDlls) {
-              Copy-Item "$tbbPath\*.dll" dist\
+              $tbbDlls | Copy-Item -Destination dist\
               Write-Host "Copied $($tbbDlls.Count) TBB DLL(s)"
             } else {
               Write-Host "No TBB DLLs found in $tbbPath"
