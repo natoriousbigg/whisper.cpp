@@ -117,14 +117,17 @@ jobs:
           }
           
           Write-Host "Configuring environment variables..."
-          $cmakePath = Join-Path $runtimePath "cmake"
+          
+          $cmakePath = Join-Path $openvinoPath "cmake"
+          if (!(Test-Path $cmakePath)) {
+            $cmakePath = Join-Path $runtimePath "cmake"
+          }
+          
           if (Test-Path $cmakePath) {
             "OpenVINO_DIR=$cmakePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
             Write-Host "Set OpenVINO_DIR=$cmakePath"
           } else {
-            Write-Host "Warning: CMake directory not found at $cmakePath"
-            "OpenVINO_DIR=$runtimePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-            Write-Host "Set OpenVINO_DIR=$runtimePath"
+            throw "Could not find OpenVINO cmake directory at any expected location"
           }
           
           $binPath = Join-Path $runtimePath "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
@@ -149,7 +152,7 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DGGML_AVX512=ON ^
+            -DGGML_AVX512=OFF ^
             -DBUILD_SHARED_LIBS=OFF ^
             -DGGML_STATIC=ON ^
             -DGGML_VULKAN=OFF ^
