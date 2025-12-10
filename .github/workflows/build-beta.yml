@@ -14,6 +14,13 @@ on:
       - '**/*.cpp'
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/build-beta.yml'
+      - '**/CMakeLists.txt'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
   workflow_dispatch:
     inputs:
       create_release:
@@ -23,7 +30,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -100,22 +107,16 @@ jobs:
           Write-Host "Installing OpenVINO via vcpkg with binary caching..."
           Write-Host "Binary caching enabled via VCPKG_BINARY_SOURCES env var"
           
-          # Use binary caching to get prebuilt packages instead of building from source
-          # This avoids dependency build issues
           try {
-            # Install OpenVINO - this should use cached binaries from GitHub Actions cache
             vcpkg install openvino:x64-windows --binarysource="clear;x-gha,readwrite"
             
             if ($LASTEXITCODE -eq 0) {
               Write-Host "✓ OpenVINO installed successfully via vcpkg"
-              
-              # vcpkg integrates with CMake automatically via toolchain file
-              # Environment variables are set by vcpkg action
-              
             } else {
               throw "vcpkg install failed with exit code $LASTEXITCODE"
             }
-          } catch {
+          }
+          catch {
             Write-Host "ERROR: vcpkg installation failed"
             Write-Host "Error: $_"
             Write-Host ""
@@ -162,7 +163,6 @@ jobs:
               throw "Runtime directory not found after installation"
             }
             
-            # Set environment for manual installation
             $cmakePath = "$installPath\runtime\cmake"
             "OpenVINO_DIR=$cmakePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
             "$installPath\runtime\bin\intel64\Release" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
