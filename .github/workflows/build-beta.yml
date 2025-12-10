@@ -89,50 +89,86 @@ jobs:
       - name: Install Ninja
         run: choco install ninja -y
 
-      - name: Setup vcpkg
+      - name: Setup vcpkg (latest)
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2cbc495aa94'
 
       - name: Install OpenVINO via vcpkg
         shell: powershell
         run: |
-          Write-Host "Installing OpenVINO via vcpkg..."
-          Write-Host "This provides better dependency management and reliability"
+          Write-Host "Installing OpenVINO via vcpkg with binary caching..."
+          Write-Host "Binary caching enabled via VCPKG_BINARY_SOURCES env var"
           
-          # Install OpenVINO using vcpkg
-          vcpkg install openvino:x64-windows
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "vcpkg install failed, falling back to manual installation..."
+          # Use binary caching to get prebuilt packages instead of building from source
+          # This avoids dependency build issues
+          try {
+            # Install OpenVINO - this should use cached binaries from GitHub Actions cache
+            vcpkg install openvino:x64-windows --binarysource="clear;x-gha,readwrite"
             
-            # Fallback to manual installation
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✓ OpenVINO installed successfully via vcpkg"
+              
+              # vcpkg integrates with CMake automatically via toolchain file
+              # Environment variables are set by vcpkg action
+              
+            } else {
+              throw "vcpkg install failed with exit code $LASTEXITCODE"
+            }
+          } catch {
+            Write-Host "ERROR: vcpkg installation failed"
+            Write-Host "Error: $_"
+            Write-Host ""
+            Write-Host "Falling back to manual OpenVINO installation..."
+            
             $ErrorActionPreference = 'Stop'
             $url = "https://storage.openvinotoolkit.org/repositories/openvino/packages/${{ env.OPENVINO_VERSION }}/windows/w_openvino_toolkit_windows_${{ env.OPENVINO_VERSION }}.zip"
             $zipFile = "C:\openvino_installer.zip"
             $installPath = "C:\openvino"
             
             Write-Host "Downloading OpenVINO from: $url"
-            Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
+            Write-Host "This may take several minutes (file is ~500MB)..."
             
-            Write-Host "Extracting OpenVINO..."
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing -TimeoutSec 1800
+            $ProgressPreference = 'Continue'
+            
+            if (-not (Test-Path $zipFile)) {
+              throw "Downloaded file not found"
+            }
+            
+            $fileSize = (Get-Item $zipFile).Length / 1MB
+            Write-Host "Downloaded: $([math]::Round($fileSize, 2)) MB"
+            
+            if ($fileSize -lt 100) {
+              throw "File too small: $([math]::Round($fileSize, 2)) MB"
+            }
+            
+            Write-Host "Extracting..."
             Expand-Archive -Path $zipFile -DestinationPath C:\openvino_temp -Force
             
             $extractedDir = Get-ChildItem C:\openvino_temp -Directory | Select-Object -First 1
+            if (!$extractedDir) {
+              throw "No directory in archive"
+            }
+            
             New-Item -ItemType Directory -Force -Path $installPath | Out-Null
             Move-Item -Path "$($extractedDir.FullName)\*" -Destination $installPath -Force
             
-            # Cleanup
-            Remove-Item $zipFile -Force
-            Remove-Item C:\openvino_temp -Recurse -Force
+            Remove-Item $zipFile -Force -ErrorAction SilentlyContinue
+            Remove-Item C:\openvino_temp -Recurse -Force -ErrorAction SilentlyContinue
+            
+            if (!(Test-Path "$installPath\runtime")) {
+              throw "Runtime directory not found after installation"
+            }
             
             # Set environment for manual installation
-            "OpenVINO_DIR=$installPath\runtime\cmake" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+            $cmakePath = "$installPath\runtime\cmake"
+            "OpenVINO_DIR=$cmakePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
             "$installPath\runtime\bin\intel64\Release" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
             "$installPath\runtime\3rdparty\tbb\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          } else {
-            Write-Host "OpenVINO installed successfully via vcpkg"
-            # vcpkg sets up the environment automatically
+            
+            Write-Host "✓ Manual installation completed"
           }
 
       - name: Configure (OpenVINO)
