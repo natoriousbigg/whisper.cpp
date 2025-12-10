@@ -1,0 +1,70 @@
+name: Windows NoAVX512 Build
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload_artifacts:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Windows x64 (No AVX512)
+    runs-on: windows-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Configure
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DGGML_AVX512=OFF ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
+            -DGGML_VULKAN=OFF ^
+            -DWHISPER_SDL2=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF ^
+            -DWHISPER_BUILD_EXAMPLES=ON ^
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          cmake --build build --config Release -- -v
+
+      - name: Package whisper-cli and whisper-bench
+        if: ${{ inputs.upload_artifacts }}
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          
+          Copy-Item build\bin\whisper-cli.exe dist\
+          Copy-Item build\bin\whisper-bench.exe dist\
+          
+          if (Test-Path "build\bin\*.dll") {
+            Copy-Item build\bin\*.dll dist\
+          }
+
+      - name: Upload artifacts
+        if: ${{ inputs.upload_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-windows-x64-noavx512
+          path: dist/*

@@ -1,0 +1,227 @@
+name: Windows CUDA Build
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload_artifacts:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Windows x64 (CUDA)
+    runs-on: windows-latest
+    env:
+      CUDA_PATH: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4
+      CUDA_VERSION: "12.4.1"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Cache CUDA Toolkit
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+
+      - name: Check CUDA cache status
+        id: cuda-cache-check
+        shell: powershell
+        run: |
+          $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
+          $cacheRestored = $false
+          
+          Write-Host "Checking for CUDA at: $cudaBasePath"
+          Write-Host "Cache hit output: '${{ steps.cache-cuda.outputs.cache-hit }}'"
+          
+          if (Test-Path $cudaBasePath) {
+            Write-Host "Contents of CUDA base directory:"
+            Get-ChildItem $cudaBasePath | Format-Table -AutoSize
+            
+            $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^v\d+\.\d+$' }
+            if ($installedVersions) {
+              foreach ($version in $installedVersions) {
+                $nvccPath = Join-Path $version.FullName "bin\nvcc.exe"
+                Write-Host "Checking for nvcc at: $nvccPath"
+                if (Test-Path $nvccPath) {
+                  Write-Host "CUDA cache restored - using cached installation at: $($version.FullName)"
+                  Write-Host "Installation time saved: ~10 minutes"
+                  $cacheRestored = $true
+                  break
+                }
+              }
+            }
+          } else {
+            Write-Host "CUDA base directory does not exist"
+          }
+          
+          if (-not $cacheRestored) {
+            Write-Host "CUDA cache miss - will install and cache for future runs"
+            Write-Host "This will take approximately 10 minutes"
+          }
+          
+          if ($cacheRestored) {
+            "cache_restored=true" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            "cache_restored=false" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+
+      - name: Install CUDA Toolkit
+        if: steps.cuda-cache-check.outputs.cache_restored != 'true'
+        shell: powershell
+        run: |
+          Write-Host "Installing NVIDIA CUDA Toolkit..."
+          Write-Host "Note: This installation will be cached for subsequent workflow runs."
+          
+          choco install cuda -y --no-progress
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Error: Installation failed with exit code $LASTEXITCODE"
+            Write-Host ""
+            Write-Host "Installation failed and cannot continue."
+            exit 1
+          } else {
+            Write-Host "Installation completed successfully"
+          }
+
+      - name: Set CUDA environment variables and verify installation
+        shell: powershell
+        run: |
+          $cudaBasePath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
+          
+          if (Test-Path $cudaBasePath) {
+            $installedVersions = Get-ChildItem -Path $cudaBasePath -Directory | Where-Object { $_.Name -match '^v\d+\.\d+$' } | Sort-Object Name -Descending
+            
+            if ($installedVersions.Count -gt 0) {
+              $actualCudaPath = $installedVersions[0].FullName
+              Write-Host "Detected CUDA installation at: $actualCudaPath"
+              
+              echo "CUDA_PATH=$actualCudaPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+              
+              $cudaBinPath = Join-Path $actualCudaPath "bin"
+              echo "$cudaBinPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+              
+              $nvccPath = Join-Path $actualCudaPath "bin\nvcc.exe"
+              $includeDir = Join-Path $actualCudaPath "include"
+              $libDir = Join-Path $actualCudaPath "lib\x64"
+              
+              $installValid = $true
+              
+              if (-not (Test-Path $nvccPath)) {
+                Write-Host "Error: nvcc.exe not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } elseif (-not (Test-Path $includeDir)) {
+                Write-Host "Error: Include directory not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } elseif (-not (Test-Path $libDir)) {
+                Write-Host "Error: Library directory not found - CUDA installation may be incomplete"
+                $installValid = $false
+              } else {
+                Write-Host "CUDA Toolkit verified at: $actualCudaPath"
+                Write-Host "Essential components found (nvcc.exe, include, lib)"
+              }
+              
+              if (-not $installValid) {
+                Write-Host ""
+                Write-Host "Installation validation failed. The build will likely fail."
+                exit 1
+              }
+            } else {
+              Write-Host "Error: No CUDA version directories found in $cudaBasePath"
+              exit 1
+            }
+          } else {
+            Write-Host "Error: CUDA base directory not found at $cudaBasePath"
+            exit 1
+          }
+
+      - name: Configure
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DGGML_AVX512=ON ^
+            -DBUILD_SHARED_LIBS=OFF ^
+            -DGGML_STATIC=ON ^
+            -DGGML_CUDA=ON ^
+            -DWHISPER_SDL2=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF ^
+            -DWHISPER_BUILD_EXAMPLES=ON ^
+            -DWHISPER_BUILD_SERVER=OFF
+
+      - name: Build
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_PATH=%%i
+          if not defined VS_PATH exit /b 1
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+          cmake --build build --config Release -- -v
+
+      - name: Package whisper-cli and whisper-bench
+        if: ${{ inputs.upload_artifacts }}
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          
+          Copy-Item build\bin\whisper-cli.exe dist\
+          Copy-Item build\bin\whisper-bench.exe dist\
+          
+          if (Test-Path "build\bin\*.dll") {
+            Copy-Item build\bin\*.dll dist\
+          }
+          
+          if ($env:CUDA_PATH -and (Test-Path "$env:CUDA_PATH\bin")) {
+            Write-Host "Copying essential CUDA runtime DLLs from: $env:CUDA_PATH\bin"
+            $requiredDlls = @(
+              'cublas64_12.dll',
+              'cublasLt64_12.dll',
+              'cudart64_12.dll',
+              'nvrtc-builtins64_129.dll',
+              'nvblas64_12.dll',
+              'nvrtc64_120_0.dll'
+            )
+            
+            $copiedCount = 0
+            foreach ($dll in $requiredDlls) {
+              $dllPath = Join-Path "$env:CUDA_PATH\bin" $dll
+              if (Test-Path $dllPath) {
+                Copy-Item $dllPath dist\
+                Write-Host "Copied $dll"
+                $copiedCount++
+              } else {
+                Write-Host "Warning: $dll not found at $dllPath"
+              }
+            }
+            
+            if ($copiedCount -eq 0) {
+              Write-Host "Error: No required CUDA DLLs found"
+              exit 1
+            } else {
+              Write-Host "Successfully copied $copiedCount CUDA DLLs"
+            }
+          } else {
+            Write-Host "Error: CUDA_PATH not set or bin directory not found"
+            exit 1
+          }
+
+      - name: Upload artifacts
+        if: ${{ inputs.upload_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-windows-x64-cuda
+          path: dist/*
