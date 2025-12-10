@@ -152,7 +152,7 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake -S . -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DGGML_AVX512=OFF ^
+            -DGGML_AVX512=ON ^
             -DBUILD_SHARED_LIBS=OFF ^
             -DGGML_STATIC=ON ^
             -DGGML_VULKAN=OFF ^
