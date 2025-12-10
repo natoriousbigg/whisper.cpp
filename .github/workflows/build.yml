@@ -282,6 +282,16 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
+      - name: Prepare CUDA cache directory
+        run: |
+          # Create the CUDA directory with correct permissions BEFORE cache restore
+          # This is needed because /usr/local requires root to create directories
+          # and the cache action runs as the non-root runner user
+          CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          sudo mkdir -p "$CUDA_PATH"
+          # Make it writable by the runner user for cache restore
+          sudo chown -R "$USER:$USER" "$CUDA_PATH"
+
       - name: Cache CUDA Toolkit
         id: cache-cuda
         uses: actions/cache@v4
@@ -333,6 +343,10 @@ jobs:
           # Install minimal CUDA toolkit to minimize disk usage
           # Using cuda-minimal-build metapackage which includes only build essentials
           sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
+          
+          # Change ownership to runner user so the cache action can save the directory
+          # (apt-get installs files as root, but cache action needs user permissions)
+          sudo chown -R "$USER:$USER" "/usr/local/cuda-${{ env.CUDA_VERSION }}"
 
       - name: Set CUDA environment variables
         run: |
