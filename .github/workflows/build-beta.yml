@@ -111,12 +111,11 @@ jobs:
             vcpkg install openvino:x64-windows --binarysource="clear;x-gha,readwrite"
             
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ OpenVINO installed successfully via vcpkg"
+              Write-Host "[OK] OpenVINO installed successfully via vcpkg"
             } else {
               throw "vcpkg install failed with exit code $LASTEXITCODE"
             }
-          }
-          catch {
+          } catch {
             Write-Host "ERROR: vcpkg installation failed"
             Write-Host "Error: $_"
             Write-Host ""
@@ -168,7 +167,7 @@ jobs:
             "$installPath\runtime\bin\intel64\Release" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
             "$installPath\runtime\3rdparty\tbb\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
             
-            Write-Host "✓ Manual installation completed"
+            Write-Host "[OK] Manual installation completed"
           }
 
       - name: Configure (OpenVINO)
