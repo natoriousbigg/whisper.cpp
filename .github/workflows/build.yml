@@ -219,16 +219,13 @@ jobs:
         run: |
           mkdir -p dist
           cp build/bin/whisper-cli build/bin/whisper-bench dist/
-          pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
-          popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+          path: dist/*
 
       - name: Cleanup workspace
         if: always()
@@ -430,17 +427,13 @@ jobs:
           # List all files in dist for verification
           echo "Package contents:"
           ls -la dist/
-          
-          pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" *
-          popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+          path: dist/*
 
       - name: Cleanup workspace
         if: always()
@@ -502,16 +495,13 @@ jobs:
         run: |
           mkdir -p dist
           cp build/bin/whisper-cli build/bin/whisper-bench dist/
-          pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip" whisper-cli whisper-bench
-          popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}.zip
+          path: dist/*
 
       - name: Cleanup workspace
         if: always()
@@ -567,16 +557,13 @@ jobs:
         run: |
           mkdir -p dist
           cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
-          pushd dist
-          zip -9 "whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip" whisper-cli whisper-bench
-          popd
 
       - name: Upload whisper-cli package
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-macos-${{ matrix.suffix }}
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-macos-universal-${{ matrix.suffix }}.zip
+          path: dist/*
 
 
 
@@ -743,23 +730,13 @@ jobs:
           if (Test-Path "build\bin\*.dll") {
             Copy-Item build\bin\*.dll dist\
           }
-          
-          # Create zip package
-          Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path "*.exe" -Name)
-          if (Test-Path "*.dll") {
-            $filesToZip += @(Get-ChildItem -Path "*.dll" -Name)
-          }
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip $filesToZip
-          Pop-Location
-          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip dist\
 
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} Vulkan)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-vulkan
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-vulkan.zip
+          path: dist/*
 
   windows-build-cuda:
     needs: determine-tag
@@ -996,23 +973,13 @@ jobs:
             Write-Host "Error: CUDA_PATH not set or bin directory not found"
             exit 1
           }
-          
-          # Create zip package
-          Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path "*.exe" -Name)
-          if (Test-Path "*.dll") {
-            $filesToZip += @(Get-ChildItem -Path "*.dll" -Name)
-          }
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip $filesToZip
-          Pop-Location
-          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip dist\
 
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} CUDA)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-cuda
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-cuda.zip
+          path: dist/*
 
   windows-build-noavx512:
     needs: determine-tag
@@ -1073,23 +1040,13 @@ jobs:
           if (Test-Path "build\bin\*.dll") {
             Copy-Item build\bin\*.dll dist\
           }
-          
-          # Create zip package
-          Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path "*.exe" -Name)
-          if (Test-Path "*.dll") {
-            $filesToZip += @(Get-ChildItem -Path "*.dll" -Name)
-          }
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-noavx512.zip $filesToZip
-          Pop-Location
-          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-noavx512.zip dist\
 
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} No AVX512)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-noavx512
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-noavx512.zip
+          path: dist/*
 
   windows-build-openvino:
     needs: determine-tag
@@ -1277,23 +1234,13 @@ jobs:
           # List all files in dist for verification
           Write-Host "Package contents:"
           Get-ChildItem dist\ | ForEach-Object { Write-Host "  - $($_.Name)" }
-          
-          # Create zip package
-          Push-Location dist
-          $filesToZip = @(Get-ChildItem -Path "*.exe" -Name)
-          if (Test-Path "*.dll") {
-            $filesToZip += @(Get-ChildItem -Path "*.dll" -Name)
-          }
-          tar.exe -a -c -f ..\whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openvino.zip $filesToZip
-          Pop-Location
-          Move-Item whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openvino.zip dist\
 
       - name: Upload whisper-cli package (Windows ${{ matrix.arch }} OpenVINO)
         if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: whisper-cli-windows-${{ matrix.arch }}-openvino
-          path: dist/whisper-cli-${{ needs.determine-tag.outputs.tag_name }}-windows-${{ matrix.arch }}-openvino.zip
+          path: dist/*
 
   create-release:
     if: ${{ needs.determine-tag.outputs.should_release == 'true' || github.event.inputs.run_type == 'release-only' }}
@@ -1305,17 +1252,38 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: whisper-cli-*
-          path: release
-          merge-multiple: true
+          path: artifacts
+          merge-multiple: false
 
-      # Full packages are available as workflow artifacts but excluded from releases to reduce size
-      # Uncomment below to include full packages (with all examples) in releases
-      # - name: Download full packages
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     pattern: whisper.cpp-full-*
-      #     path: release
-      #     merge-multiple: true
+      - name: Create release zip packages
+        run: |
+          TAG_NAME="${{ needs.determine-tag.outputs.tag_name }}"
+          RELEASE_DIR="$(pwd)/release"
+          mkdir -p "$RELEASE_DIR"
+          
+          # Create zip file for each artifact directory
+          for dir in artifacts/whisper-cli-*/; do
+            if [ -d "$dir" ]; then
+              # Extract artifact name from directory path (e.g., whisper-cli-ubuntu-x64-vulkan)
+              artifact_name=$(basename "$dir")
+              
+              # Create zip filename with version tag
+              # Convert artifact name to release filename format
+              # whisper-cli-ubuntu-x64-vulkan -> whisper-cli-${TAG_NAME}-ubuntu-x64-vulkan.zip
+              release_name=$(echo "$artifact_name" | sed "s/^whisper-cli-/whisper-cli-${TAG_NAME}-/")
+              zip_file="${RELEASE_DIR}/${release_name}.zip"
+              
+              echo "Creating $zip_file from $dir"
+              
+              # Create zip with files at root level (no subdirectory)
+              pushd "$dir" > /dev/null
+              zip -9 "$zip_file" *
+              popd > /dev/null
+            fi
+          done
+          
+          echo "Created release packages:"
+          ls -la release/
 
       - name: Display package sizes
         run: |
