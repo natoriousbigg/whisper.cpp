@@ -1104,79 +1104,80 @@ jobs:
     runs-on: windows-latest
     
     env:
-      OPENVINO_VERSION: "2024.6.0"
+      # OpenVINO toolkit download URL - full runtime package with all required DLLs
+      OPENVINO_DOWNLOAD_URL: "https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.6/windows/w_openvino_toolkit_windows_2024.6.0.17404.4c0f47d2335_x86_64.zip"
+      OPENVINO_FOLDER_NAME: "w_openvino_toolkit_windows_2024.6.0.17404.4c0f47d2335_x86_64"
 
     steps:
       - name: Clone
         uses: actions/checkout@v4
 
       - name: Install Dependencies
-        run: |
-          choco install ninja -y
-          python -m pip install --upgrade pip
+        run: choco install ninja -y
 
-      - name: Install OpenVINO via Python
+      - name: Download and Extract OpenVINO Toolkit
         shell: powershell
         run: |
-          Write-Host "Setting up Python environment for OpenVINO installation..."
-          
-          python -m pip install openvino==${{ env.OPENVINO_VERSION }}
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to install OpenVINO Python package"
+          Write-Host "Downloading OpenVINO toolkit from: $env:OPENVINO_DOWNLOAD_URL"
+          try {
+            Invoke-WebRequest -Uri $env:OPENVINO_DOWNLOAD_URL -OutFile openvino.zip -ErrorAction Stop
+          } catch {
+            throw "Failed to download OpenVINO toolkit: $_"
+          }
+          if (!(Test-Path openvino.zip)) {
+            throw "Failed to download OpenVINO toolkit - file not found"
           }
           
-          Write-Host "OpenVINO Python package installed successfully"
+          Write-Host "Extracting OpenVINO toolkit..."
+          Expand-Archive -Path openvino.zip -DestinationPath openvino
           
-          Write-Host "Locating OpenVINO installation..."
-          $openvinoPath = python -c "import openvino; import os; print(os.path.dirname(openvino.__file__))"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to locate OpenVINO installation"
+          $openvinoRoot = Join-Path (Get-Location) "openvino" | Join-Path -ChildPath $env:OPENVINO_FOLDER_NAME
+          if (!(Test-Path $openvinoRoot)) {
+            throw "OpenVINO extraction failed - folder not found: $openvinoRoot"
           }
           
-          Write-Host "OpenVINO installed at: $openvinoPath"
+          Write-Host "OpenVINO extracted to: $openvinoRoot"
+          "OPENVINO_ROOT=$openvinoRoot" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure OpenVINO Environment
+        shell: powershell
+        run: |
+          $openvinoRoot = $env:OPENVINO_ROOT
+          Write-Host "Setting up OpenVINO environment from: $openvinoRoot"
           
-          # Save OpenVINO path for later use in packaging step
-          "OPENVINO_INSTALL_PATH=$openvinoPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          
-          $runtimePath = Join-Path $openvinoPath "runtime"
-          if (!(Test-Path $runtimePath)) {
-            $runtimePath = Join-Path $openvinoPath ".."  | Join-Path -ChildPath "runtime"
+          # Run setupvars.ps1 and capture environment changes
+          $setupVars = Join-Path $openvinoRoot "setupvars.ps1"
+          if (!(Test-Path $setupVars)) {
+            throw "setupvars.ps1 not found at: $setupVars"
           }
           
-          if (!(Test-Path $runtimePath)) {
-            throw "Could not find OpenVINO runtime directory"
-          }
+          # Source the setupvars script
+          . $setupVars
           
-          # Save runtime path for packaging
-          "OPENVINO_RUNTIME_PATH=$runtimePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          
-          Write-Host "Configuring environment variables..."
-          
-          $cmakePath = Join-Path $openvinoPath "cmake"
-          if (!(Test-Path $cmakePath)) {
-            $cmakePath = Join-Path $runtimePath "cmake"
-          }
-          
+          # Set OpenVINO_DIR for CMake
+          $cmakePath = Join-Path $openvinoRoot "runtime" | Join-Path -ChildPath "cmake"
           if (Test-Path $cmakePath) {
             "OpenVINO_DIR=$cmakePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
             Write-Host "Set OpenVINO_DIR=$cmakePath"
           } else {
-            throw "Could not find OpenVINO cmake directory at any expected location"
+            throw "OpenVINO cmake directory not found at: $cmakePath"
           }
           
-          $binPath = Join-Path $runtimePath "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
+          # Add runtime binaries to PATH
+          $binPath = Join-Path $openvinoRoot "runtime" | Join-Path -ChildPath "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
           if (Test-Path $binPath) {
             "$binPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
             Write-Host "Added to PATH: $binPath"
           }
           
-          $tbbPath = Join-Path $runtimePath "3rdparty" | Join-Path -ChildPath "tbb" | Join-Path -ChildPath "bin"
+          # Add TBB DLLs to PATH
+          $tbbPath = Join-Path $openvinoRoot "runtime" | Join-Path -ChildPath "3rdparty" | Join-Path -ChildPath "tbb" | Join-Path -ChildPath "bin"
           if (Test-Path $tbbPath) {
             "$tbbPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
             Write-Host "Added to PATH: $tbbPath"
           }
           
-          Write-Host "[OK] OpenVINO configuration completed successfully"
+          Write-Host "[OK] OpenVINO environment configured successfully"
 
       - name: Configure (OpenVINO)
         shell: cmd
@@ -1220,77 +1221,62 @@ jobs:
             Copy-Item build\bin\*.dll dist\
           }
           
-          # Copy OpenVINO runtime DLLs from Python package installation
           $copiedDlls = 0
+          $openvinoRoot = $env:OPENVINO_ROOT
           
-          if ($env:OPENVINO_INSTALL_PATH -and (Test-Path $env:OPENVINO_INSTALL_PATH)) {
-            Write-Host "OpenVINO install path: $env:OPENVINO_INSTALL_PATH"
+          if ($openvinoRoot -and (Test-Path $openvinoRoot)) {
+            Write-Host "Copying OpenVINO runtime DLLs from toolkit: $openvinoRoot"
             
-            # For pip-installed OpenVINO, DLLs are in the 'libs' folder directly
-            # This is where openvino.lib and openvino.dll are stored
-            $libsPath = Join-Path $env:OPENVINO_INSTALL_PATH "libs"
-            if (Test-Path $libsPath) {
-              Write-Host "Copying OpenVINO DLLs from: $libsPath"
-              $libsDlls = Get-ChildItem "$libsPath\*.dll" -ErrorAction SilentlyContinue
-              if ($libsDlls) {
-                $libsDlls | Copy-Item -Destination dist\
-                $copiedDlls += $libsDlls.Count
-                Write-Host "Copied $($libsDlls.Count) DLL(s) from libs folder"
+            # Copy OpenVINO runtime DLLs from runtime/bin/intel64/Release
+            $binPath = Join-Path $openvinoRoot "runtime" | Join-Path -ChildPath "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
+            if (Test-Path $binPath) {
+              Write-Host "Copying runtime DLLs from: $binPath"
+              $runtimeDlls = Get-ChildItem "$binPath\*.dll" -ErrorAction SilentlyContinue
+              if ($runtimeDlls) {
+                $runtimeDlls | Copy-Item -Destination dist\
+                $copiedDlls += $runtimeDlls.Count
+                Write-Host "Copied $($runtimeDlls.Count) runtime DLL(s)"
+                foreach ($dll in $runtimeDlls) {
+                  Write-Host "  - $($dll.Name)"
+                }
               }
             } else {
-              Write-Host "Warning: libs folder not found at $libsPath"
+              Write-Host "Warning: Runtime bin path not found: $binPath"
             }
             
-            # Define paths for runtime DLLs (used both for copying and for warning messages)
-            $binPath = $null
-            $tbbPath = $null
-            
-            # Also check for runtime DLLs in alternative locations
-            if ($env:OPENVINO_RUNTIME_PATH -and (Test-Path $env:OPENVINO_RUNTIME_PATH)) {
-              # Try standard paths: runtime/bin/intel64/Release
-              $binPath = Join-Path $env:OPENVINO_RUNTIME_PATH "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
-              if (Test-Path $binPath) {
-                Write-Host "Copying runtime DLLs from: $binPath"
-                $runtimeDlls = Get-ChildItem "$binPath\*.dll" -ErrorAction SilentlyContinue
-                if ($runtimeDlls) {
-                  $runtimeDlls | Copy-Item -Destination dist\
-                  $copiedDlls += $runtimeDlls.Count
-                  Write-Host "Copied $($runtimeDlls.Count) runtime DLL(s)"
+            # Copy TBB DLLs from runtime/3rdparty/tbb/bin
+            $tbbPath = Join-Path $openvinoRoot "runtime" | Join-Path -ChildPath "3rdparty" | Join-Path -ChildPath "tbb" | Join-Path -ChildPath "bin"
+            if (Test-Path $tbbPath) {
+              Write-Host "Copying TBB DLLs from: $tbbPath"
+              $tbbDlls = Get-ChildItem "$tbbPath\*.dll" -ErrorAction SilentlyContinue
+              if ($tbbDlls) {
+                $tbbDlls | Copy-Item -Destination dist\
+                $copiedDlls += $tbbDlls.Count
+                Write-Host "Copied $($tbbDlls.Count) TBB DLL(s)"
+                foreach ($dll in $tbbDlls) {
+                  Write-Host "  - $($dll.Name)"
                 }
               }
-              
-              # Copy TBB DLLs from runtime/3rdparty/tbb/bin
-              $tbbPath = Join-Path $env:OPENVINO_RUNTIME_PATH "3rdparty" | Join-Path -ChildPath "tbb" | Join-Path -ChildPath "bin"
-              if (Test-Path $tbbPath) {
-                Write-Host "Copying TBB DLLs from: $tbbPath"
-                $tbbDlls = Get-ChildItem "$tbbPath\*.dll" -ErrorAction SilentlyContinue
-                if ($tbbDlls) {
-                  $tbbDlls | Copy-Item -Destination dist\
-                  $copiedDlls += $tbbDlls.Count
-                  Write-Host "Copied $($tbbDlls.Count) TBB DLL(s)"
-                }
-              }
+            } else {
+              Write-Host "Warning: TBB path not found: $tbbPath"
             }
             
             if ($copiedDlls -eq 0) {
-              Write-Host "Warning: No OpenVINO DLLs found in expected locations"
+              Write-Host "Error: No OpenVINO DLLs found in expected locations"
               Write-Host "Searched paths:"
-              Write-Host "  - $libsPath"
-              if ($binPath) {
-                Write-Host "  - $binPath"
-              }
-              if ($tbbPath) {
-                Write-Host "  - $tbbPath"
-              }
+              Write-Host "  - $binPath"
+              Write-Host "  - $tbbPath"
+              throw "No OpenVINO DLLs found - packaging failed"
             } else {
               Write-Host "Successfully copied $copiedDlls OpenVINO-related DLL(s)"
             }
           } else {
-            Write-Host "Error: OPENVINO_INSTALL_PATH not set or path does not exist"
-            Write-Host "Expected path format: <Python site-packages>/openvino"
-            Write-Host "This may cause runtime errors when executing the binaries"
-            Write-Host "Verify that OpenVINO was installed correctly via pip in the previous step"
+            throw "OPENVINO_ROOT not set or path does not exist"
           }
+          
+          # List all files in dist for verification
+          Write-Host "Package contents:"
+          Get-ChildItem dist\ | ForEach-Object { Write-Host "  - $($_.Name)" }
           
           # Create zip package
           Push-Location dist
