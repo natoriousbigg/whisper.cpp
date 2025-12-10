@@ -1271,9 +1271,18 @@ jobs:
           }
           
           # Copy TBB DLLs if they exist
-          if (Test-Path "$openvinoPath\runtime\3rdparty\tbb\bin") {
-            Write-Host "Copying TBB DLLs..."
-            Copy-Item "$openvinoPath\runtime\3rdparty\tbb\bin\*.dll" dist\ -ErrorAction SilentlyContinue
+          $tbbPath = "$openvinoPath\runtime\3rdparty\tbb\bin"
+          if (Test-Path $tbbPath) {
+            Write-Host "Copying TBB DLLs from: $tbbPath"
+            $tbbDlls = Get-ChildItem "$tbbPath\*.dll" -ErrorAction SilentlyContinue
+            if ($tbbDlls) {
+              Copy-Item "$tbbPath\*.dll" dist\
+              Write-Host "Copied $($tbbDlls.Count) TBB DLL(s)"
+            } else {
+              Write-Host "No TBB DLLs found in $tbbPath"
+            }
+          } else {
+            Write-Host "TBB directory not found at $tbbPath (optional)"
           }
           
           # Create zip package
