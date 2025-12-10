@@ -157,8 +157,7 @@ jobs:
             -DWHISPER_SDL2=OFF ^
             -DWHISPER_BUILD_TESTS=OFF ^
             -DWHISPER_BUILD_EXAMPLES=ON ^
-            -DWHISPER_BUILD_SERVER=OFF ^
-            -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+            -DWHISPER_BUILD_SERVER=OFF
 
       - name: Build (OpenVINO)
         shell: cmd
