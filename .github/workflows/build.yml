@@ -794,7 +794,7 @@ jobs:
           # Cache key without run_id to allow reuse across runs
           key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-cuda-
+            ${{ runner.os }}-cuda-12-
 
       - name: Check CUDA cache status
         id: cuda-cache-check
@@ -1257,7 +1257,9 @@ jobs:
             }
           } else {
             Write-Host "Error: OPENVINO_RUNTIME_PATH not set or path does not exist"
+            Write-Host "Expected path format: <Python site-packages>/openvino/runtime"
             Write-Host "This may cause runtime errors when executing the binaries"
+            Write-Host "Verify that OpenVINO was installed correctly via pip in the previous step"
           }
           
           # Create zip package
