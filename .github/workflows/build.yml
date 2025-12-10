@@ -1131,7 +1131,7 @@ jobs:
     runs-on: windows-latest
     
     env:
-      OPENVINO_VERSION: "2024.5.0"
+      OPENVINO_VERSION: "2024.6.0"
 
     steps:
       - name: Clone
@@ -1185,41 +1185,123 @@ jobs:
           New-Item -ItemType Directory -Force -Path C:\openvino | Out-Null
           
           # Download OpenVINO runtime
+          # Using the recommended 2024.6.0 version from OpenVINO archives
           $url = "https://storage.openvinotoolkit.org/repositories/openvino/packages/${{ env.OPENVINO_VERSION }}/windows/w_openvino_toolkit_windows_${{ env.OPENVINO_VERSION }}.zip"
           $zipFile = "C:\openvino_installer.zip"
           
           Write-Host "Downloading OpenVINO from: $url"
-          Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $zipFile -UseBasicParsing
+            Write-Host "Download completed successfully"
+          } catch {
+            Write-Host "Error downloading OpenVINO: $_"
+            Write-Host "Attempted URL: $url"
+            exit 1
+          }
+          
+          # Verify download
+          if (-not (Test-Path $zipFile)) {
+            Write-Host "Error: Downloaded file not found at $zipFile"
+            exit 1
+          }
+          
+          $fileSize = (Get-Item $zipFile).Length / 1MB
+          Write-Host "Downloaded file size: $([math]::Round($fileSize, 2)) MB"
           
           Write-Host "Extracting OpenVINO..."
-          Expand-Archive -Path $zipFile -DestinationPath C:\openvino_temp -Force
+          try {
+            Expand-Archive -Path $zipFile -DestinationPath C:\openvino_temp -Force
+            Write-Host "Extraction completed"
+          } catch {
+            Write-Host "Error extracting OpenVINO: $_"
+            exit 1
+          }
           
           # Move files to C:\openvino
           $extractedDir = Get-ChildItem C:\openvino_temp -Directory | Select-Object -First 1
+          if ($null -eq $extractedDir) {
+            Write-Host "Error: No directory found in extracted archive"
+            Write-Host "Contents of C:\openvino_temp:"
+            Get-ChildItem C:\openvino_temp
+            exit 1
+          }
+          
+          Write-Host "Moving files from $($extractedDir.FullName) to C:\openvino"
           Move-Item -Path "$($extractedDir.FullName)\*" -Destination C:\openvino -Force
           
           # Cleanup
           Remove-Item $zipFile -Force
           Remove-Item C:\openvino_temp -Recurse -Force
           
-          Write-Host "OpenVINO installation completed"
+          # Verify installation
+          Write-Host "Verifying OpenVINO installation..."
+          Write-Host "Contents of C:\openvino:"
+          Get-ChildItem C:\openvino | Format-Table -AutoSize
+          
+          if (Test-Path "C:\openvino\runtime") {
+            Write-Host "✓ Runtime directory found"
+          } else {
+            Write-Host "✗ Warning: Runtime directory not found"
+          }
+          
+          Write-Host "OpenVINO installation completed successfully"
 
       - name: Set OpenVINO environment
         shell: powershell
         run: |
           $openvinoPath = "C:\openvino"
           
-          if (Test-Path "$openvinoPath\setupvars.ps1") {
-            Write-Host "Running OpenVINO setup script..."
-            & "$openvinoPath\setupvars.ps1"
+          # Verify OpenVINO installation
+          if (-not (Test-Path $openvinoPath)) {
+            Write-Host "Error: OpenVINO directory not found at $openvinoPath"
+            exit 1
           }
           
-          # Set environment variables
-          "OpenVINO_DIR=$openvinoPath\runtime\cmake" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          "$openvinoPath\runtime\bin\intel64\Release" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-          "$openvinoPath\runtime\3rdparty\tbb\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+          # Check for runtime directory structure
+          $runtimePath = "$openvinoPath\runtime"
+          if (-not (Test-Path $runtimePath)) {
+            Write-Host "Error: OpenVINO runtime directory not found at $runtimePath"
+            Write-Host "Contents of $openvinoPath:"
+            Get-ChildItem $openvinoPath
+            exit 1
+          }
           
-          Write-Host "OpenVINO environment configured"
+          # Set environment variables for CMake to find OpenVINO
+          $cmakePath = "$openvinoPath\runtime\cmake"
+          if (Test-Path $cmakePath) {
+            "OpenVINO_DIR=$cmakePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "Set OpenVINO_DIR=$cmakePath"
+          } else {
+            Write-Host "Warning: CMake directory not found at $cmakePath"
+            # Try alternative path
+            $altCmakePath = "$openvinoPath\cmake"
+            if (Test-Path $altCmakePath) {
+              "OpenVINO_DIR=$altCmakePath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+              Write-Host "Set OpenVINO_DIR=$altCmakePath"
+            }
+          }
+          
+          # Add runtime binaries to PATH
+          $binPath = "$openvinoPath\runtime\bin\intel64\Release"
+          if (Test-Path $binPath) {
+            "$binPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "Added to PATH: $binPath"
+          }
+          
+          # Add TBB binaries to PATH
+          $tbbPath = "$openvinoPath\runtime\3rdparty\tbb\bin"
+          if (Test-Path $tbbPath) {
+            "$tbbPath" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "Added to PATH: $tbbPath"
+          }
+          
+          # Run setupvars if available for additional configuration
+          if (Test-Path "$openvinoPath\setupvars.ps1") {
+            Write-Host "Found setupvars.ps1 script"
+            # Note: setupvars.ps1 effects won't persist to next steps, but we've set the key vars above
+          }
+          
+          Write-Host "OpenVINO environment configured successfully"
 
       - name: Configure (OpenVINO)
         shell: cmd
