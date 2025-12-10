@@ -1226,7 +1226,7 @@ jobs:
           if ($env:OPENVINO_RUNTIME_PATH -and (Test-Path $env:OPENVINO_RUNTIME_PATH)) {
             Write-Host "Copying OpenVINO DLLs from Python package: $env:OPENVINO_RUNTIME_PATH"
             
-            # Copy DLLs from runtime/bin/intel64/Release
+            # Try standard paths first: runtime/bin/intel64/Release
             $binPath = Join-Path $env:OPENVINO_RUNTIME_PATH "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
             if (Test-Path $binPath) {
               Write-Host "Copying runtime DLLs from: $binPath"
@@ -1235,6 +1235,18 @@ jobs:
                 $runtimeDlls | Copy-Item -Destination dist\
                 $copiedDlls += $runtimeDlls.Count
                 Write-Host "Copied $($runtimeDlls.Count) runtime DLL(s)"
+              }
+            } else {
+              # Fallback: Try runtime/bin directly (some pip installations may use simpler structure)
+              $altBinPath = Join-Path $env:OPENVINO_RUNTIME_PATH "bin"
+              if (Test-Path $altBinPath) {
+                Write-Host "Copying runtime DLLs from alternate path: $altBinPath"
+                $runtimeDlls = Get-ChildItem "$altBinPath\*.dll" -ErrorAction SilentlyContinue
+                if ($runtimeDlls) {
+                  $runtimeDlls | Copy-Item -Destination dist\
+                  $copiedDlls += $runtimeDlls.Count
+                  Write-Host "Copied $($runtimeDlls.Count) runtime DLL(s)"
+                }
               }
             }
             
@@ -1252,6 +1264,9 @@ jobs:
             
             if ($copiedDlls -eq 0) {
               Write-Host "Warning: No OpenVINO DLLs found in expected locations"
+              Write-Host "Searched paths:"
+              Write-Host "  - $binPath"
+              Write-Host "  - $tbbPath"
             } else {
               Write-Host "Successfully copied $copiedDlls OpenVINO-related DLL(s)"
             }
