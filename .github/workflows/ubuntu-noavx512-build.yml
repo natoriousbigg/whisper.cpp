@@ -1,0 +1,80 @@
+name: Ubuntu NoAVX512 Build
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload_artifacts:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Ubuntu x64 (No AVX512)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      COMPILER_PACKAGES: ""
+      BLAS_PACKAGE: ""
+      PACKAGE_SUFFIX: "-noavx512"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
+          fi
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            $EXTRA_PACKAGES
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_VULKAN=OFF \
+            -DGGML_AVX512=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_STATIC=ON \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            ${EXTRA_CMAKE}
+
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+
+      - name: Package whisper-cli and whisper-bench
+        if: ${{ inputs.upload_artifacts }}
+        run: |
+          mkdir -p dist
+          cp build/bin/whisper-cli build/bin/whisper-bench dist/
+
+      - name: Upload artifacts
+        if: ${{ inputs.upload_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/*
+
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          rm -rf build dist
+          sudo rm -rf /var/cache/apt/archives || true

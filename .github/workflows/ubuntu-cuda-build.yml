@@ -1,0 +1,200 @@
+name: Ubuntu CUDA Build
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      upload_artifacts:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Ubuntu x64 (CUDA)
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: x64
+      DEB_ARCH: amd64
+      TRIPLET: x86_64-linux-gnu
+      COMPILER_PACKAGES: ""
+      BLAS_PACKAGE: ""
+      PACKAGE_SUFFIX: "-cuda"
+      EXTRA_CMAKE: "-DWHISPER_SDL2=ON -DGGML_CUDA=ON -DGGML_VULKAN=OFF"
+      CUDA_VERSION: "12.4"
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Prepare CUDA cache directory
+        run: |
+          CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          sudo mkdir -p "$CUDA_PATH"
+          sudo chown -R "$USER:$USER" "$CUDA_PATH"
+
+      - name: Cache CUDA Toolkit
+        id: cache-cuda
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/cuda-${{ env.CUDA_VERSION }}
+          key: ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-cuda-${{ env.CUDA_VERSION }}
+
+      - name: Check CUDA cache status
+        id: cuda-cache-check
+        run: |
+          CUDA_PATH="/usr/local/cuda-${{ env.CUDA_VERSION }}"
+          echo "Checking for CUDA at: $CUDA_PATH"
+          echo "Cache hit output: '${{ steps.cache-cuda.outputs.cache-hit }}'"
+          
+          if [ -d "$CUDA_PATH" ]; then
+            echo "Contents of $CUDA_PATH:"
+            ls -la "$CUDA_PATH" || true
+            if [ -d "$CUDA_PATH/bin" ]; then
+              echo "Contents of $CUDA_PATH/bin:"
+              ls "$CUDA_PATH/bin" | head -10 || true
+            fi
+          else
+            echo "CUDA directory does not exist at $CUDA_PATH"
+          fi
+          
+          if [ -d "$CUDA_PATH" ] && [ -f "$CUDA_PATH/bin/nvcc" ]; then
+            echo "CUDA cache restored - using cached installation"
+            echo "Installation time saved: ~5-10 minutes"
+            echo "cache_restored=true" >> $GITHUB_OUTPUT
+          else
+            echo "CUDA cache miss - will install and cache for future runs"
+            echo "This will take approximately 5-10 minutes"
+            echo "cache_restored=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install CUDA Toolkit
+        if: steps.cuda-cache-check.outputs.cache_restored != 'true'
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
+          sudo dpkg -i cuda-keyring_1.0-1_all.deb
+          sudo apt-get update
+          
+          sudo apt-get install -y cuda-minimal-build-12-4 cuda-libraries-dev-12-4
+          
+          sudo chown -R "$USER:$USER" "/usr/local/cuda-${{ env.CUDA_VERSION }}"
+
+      - name: Set CUDA environment variables
+        run: |
+          echo "CUDA_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}" >> $GITHUB_ENV
+          echo "/usr/local/cuda-${{ env.CUDA_VERSION }}/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture ${DEB_ARCH}
+          sudo apt-get update
+          EXTRA_PACKAGES=""
+          if [[ -n "${BLAS_PACKAGE}" ]]; then
+            EXTRA_PACKAGES="${BLAS_PACKAGE}:${DEB_ARCH}"
+          fi
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
+            ${COMPILER_PACKAGES} \
+            libsdl2-dev:${DEB_ARCH} \
+            $EXTRA_PACKAGES
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Configure
+        run: |
+          git config --global --add safe.directory /workspace
+          export PKG_CONFIG_LIBDIR="/usr/lib/${TRIPLET}/pkgconfig:/usr/share/pkgconfig"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_VULKAN=OFF \
+            -DGGML_AVX512=ON \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_STATIC=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_SERVER=OFF \
+            ${EXTRA_CMAKE}
+
+      - name: Build
+        run: cmake --build build --config Release -j $(nproc)
+
+      - name: Package whisper-cli and whisper-bench
+        if: ${{ inputs.upload_artifacts }}
+        run: |
+          mkdir -p dist
+          
+          cp build/bin/whisper-cli build/bin/whisper-bench dist/
+          
+          if ls build/lib/*.so* 1>/dev/null 2>&1; then
+            echo "Copying project shared libraries from build/lib/"
+            cp -P build/lib/*.so* dist/
+          fi
+          if ls build/bin/*.so* 1>/dev/null 2>&1; then
+            echo "Copying project shared libraries from build/bin/"
+            cp -P build/bin/*.so* dist/
+          fi
+          
+          CUDA_LIB_DIR="/usr/local/cuda-${{ env.CUDA_VERSION }}/lib64"
+          if [ -d "$CUDA_LIB_DIR" ]; then
+            echo "Copying essential CUDA runtime libraries from: $CUDA_LIB_DIR"
+            REQUIRED_LIBS=(
+              "libcublas.so.12"
+              "libcublasLt.so.12"
+              "libcudart.so.12"
+              "libnvrtc.so.12"
+              "libnvblas.so.12"
+            )
+            
+            COPIED_COUNT=0
+            MISSING_LIBS=""
+            for lib in "${REQUIRED_LIBS[@]}"; do
+              if ls "$CUDA_LIB_DIR"/${lib}* 1>/dev/null 2>&1; then
+                cp -P "$CUDA_LIB_DIR"/${lib}* dist/
+                echo "Copied $lib"
+                COPIED_COUNT=$((COPIED_COUNT + 1))
+              else
+                echo "Warning: $lib not found in $CUDA_LIB_DIR"
+                MISSING_LIBS="$MISSING_LIBS $lib"
+              fi
+            done
+            
+            if ls "$CUDA_LIB_DIR"/libnvrtc-builtins.so* 1>/dev/null 2>&1; then
+              cp -P "$CUDA_LIB_DIR"/libnvrtc-builtins.so* dist/
+              echo "Copied libnvrtc-builtins"
+              COPIED_COUNT=$((COPIED_COUNT + 1))
+            fi
+            
+            if [ $COPIED_COUNT -eq 0 ]; then
+              echo "Error: No required CUDA libraries found"
+              exit 1
+            fi
+            
+            echo "Successfully copied $COPIED_COUNT CUDA libraries"
+            if [ -n "$MISSING_LIBS" ]; then
+              echo "Warning: Some libraries were not found:$MISSING_LIBS"
+            fi
+          else
+            echo "Error: CUDA library directory not found at $CUDA_LIB_DIR"
+            exit 1
+          fi
+          
+          echo "Package contents:"
+          ls -la dist/
+
+      - name: Upload artifacts
+        if: ${{ inputs.upload_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-cli-ubuntu-${{ env.ARCH }}${{ env.PACKAGE_SUFFIX }}
+          path: dist/*
+
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          rm -rf build dist
+          sudo rm -rf /var/cache/apt/archives || true

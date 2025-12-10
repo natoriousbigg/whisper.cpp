@@ -1,0 +1,65 @@
+name: CI (Build All)
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload build artifacts'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Ubuntu Builds
+  ubuntu-vulkan:
+    uses: ./.github/workflows/ubuntu-vulkan-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  ubuntu-cuda:
+    uses: ./.github/workflows/ubuntu-cuda-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  ubuntu-noavx512:
+    uses: ./.github/workflows/ubuntu-noavx512-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  # macOS Builds
+  macos:
+    uses: ./.github/workflows/macos-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  # Windows Builds
+  windows-vulkan:
+    uses: ./.github/workflows/windows-vulkan-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  windows-cuda:
+    uses: ./.github/workflows/windows-cuda-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  windows-noavx512:
+    uses: ./.github/workflows/windows-noavx512-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}
+
+  windows-openvino:
+    uses: ./.github/workflows/windows-openvino-build.yml
+    with:
+      upload_artifacts: ${{ inputs.upload_artifacts || true }}

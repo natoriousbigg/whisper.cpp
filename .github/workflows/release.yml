@@ -1,0 +1,235 @@
+name: CD (Release)
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create new release'
+        required: true
+        type: boolean
+        default: true
+      pre_release_tag:
+        description: 'Pre-release tag name (optional)'
+        required: false
+        type: string
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+jobs:
+  # Determine release tag
+  determine-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.tag.outputs.name }}
+      should_release: ${{ steps.tag.outputs.should_release }}
+
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tag name
+        id: tag
+        shell: bash
+        run: |
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          SHORT_HASH=$(git rev-parse --short=7 HEAD)
+          CUSTOM_TAG="${{ github.event.inputs.pre_release_tag }}"
+          SHOULD_RELEASE="false"
+
+          echo "Raw values:"
+          echo "BUILD_NUMBER: $BUILD_NUMBER"
+          echo "SHORT_HASH: $SHORT_HASH"
+          echo "BRANCH_NAME: ${{ env.BRANCH_NAME }}"
+          echo "CUSTOM_TAG: $CUSTOM_TAG"
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "Using pushed tag name"
+            TAG_NAME="${{ github.ref_name }}"
+            SHOULD_RELEASE="true"
+          elif [[ -n "$CUSTOM_TAG" ]]; then
+            echo "Using custom tag"
+            TAG_NAME="${CUSTOM_TAG}"
+            SHOULD_RELEASE="true"
+          elif [[ "${{ github.event.inputs.create_release }}" == "true" ]]; then
+            echo "Manual release requested"
+            SHOULD_RELEASE="true"
+            TAG_NAME="b${BUILD_NUMBER}"
+          elif [[ "${{ env.BRANCH_NAME }}" == "master" || "${{ env.BRANCH_NAME }}" == "main" ]]; then
+            echo "Using master/main branch format"
+            TAG_NAME="b${BUILD_NUMBER}"
+            SHOULD_RELEASE="false"
+          else
+            echo "Using non-master branch format"
+            SAFE_NAME=$(echo "${{ env.BRANCH_NAME }}" | tr '/' '-')
+            TAG_NAME="${SAFE_NAME}-b${BUILD_NUMBER}-${SHORT_HASH}"
+            SHOULD_RELEASE="false"
+          fi
+
+          echo "Final tag name: $TAG_NAME"
+          echo "Should release: $SHOULD_RELEASE"
+          echo "name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "should_release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+
+  # Build all platforms
+  ubuntu-vulkan:
+    needs: determine-tag
+    uses: ./.github/workflows/ubuntu-vulkan-build.yml
+    with:
+      upload_artifacts: true
+
+  ubuntu-cuda:
+    needs: determine-tag
+    uses: ./.github/workflows/ubuntu-cuda-build.yml
+    with:
+      upload_artifacts: true
+
+  ubuntu-noavx512:
+    needs: determine-tag
+    uses: ./.github/workflows/ubuntu-noavx512-build.yml
+    with:
+      upload_artifacts: true
+
+  macos:
+    needs: determine-tag
+    uses: ./.github/workflows/macos-build.yml
+    with:
+      upload_artifacts: true
+
+  windows-vulkan:
+    needs: determine-tag
+    uses: ./.github/workflows/windows-vulkan-build.yml
+    with:
+      upload_artifacts: true
+
+  windows-cuda:
+    needs: determine-tag
+    uses: ./.github/workflows/windows-cuda-build.yml
+    with:
+      upload_artifacts: true
+
+  windows-noavx512:
+    needs: determine-tag
+    uses: ./.github/workflows/windows-noavx512-build.yml
+    with:
+      upload_artifacts: true
+
+  windows-openvino:
+    needs: determine-tag
+    uses: ./.github/workflows/windows-openvino-build.yml
+    with:
+      upload_artifacts: true
+
+  # Create GitHub Release
+  create-release:
+    if: ${{ needs.determine-tag.outputs.should_release == 'true' }}
+    needs:
+      - determine-tag
+      - ubuntu-vulkan
+      - ubuntu-cuda
+      - ubuntu-noavx512
+      - macos
+      - windows-vulkan
+      - windows-cuda
+      - windows-noavx512
+      - windows-openvino
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download whisper-cli packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: whisper-cli-*
+          path: artifacts
+          merge-multiple: false
+
+      - name: Create release zip packages
+        run: |
+          TAG_NAME="${{ needs.determine-tag.outputs.tag_name }}"
+          RELEASE_DIR="$(pwd)/release"
+          mkdir -p "$RELEASE_DIR"
+          
+          # Create zip file for each artifact directory
+          for dir in artifacts/whisper-cli-*/; do
+            if [ -d "$dir" ]; then
+              artifact_name=$(basename "$dir")
+              
+              # Convert artifact name to release filename format
+              # whisper-cli-ubuntu-x64-vulkan -> whisper-cli-${TAG_NAME}-ubuntu-x64-vulkan.zip
+              release_name=$(echo "$artifact_name" | sed "s/^whisper-cli-/whisper-cli-${TAG_NAME}-/")
+              zip_file="${RELEASE_DIR}/${release_name}.zip"
+              
+              echo "Creating $zip_file from $dir"
+              
+              # Create zip with files at root level (no subdirectory)
+              pushd "$dir" > /dev/null
+              zip -9 "$zip_file" *
+              popd > /dev/null
+            fi
+          done
+          
+          echo "Created release packages:"
+          ls -la release/
+
+      - name: Display package sizes
+        run: |
+          echo "📦 Package Sizes:"
+          echo "===================="
+          cd release
+          
+          if ! ls *.zip >/dev/null 2>&1; then
+            echo "No package files found"
+            exit 0
+          fi
+          
+          for file in *.zip; do
+            if [ -f "$file" ]; then
+              size_bytes=$(stat -c %s "$file" 2>/dev/null)
+              if [ -n "$size_bytes" ]; then
+                size_info=$(awk -v size="$size_bytes" 'BEGIN {
+                  mb = size / 1048576
+                  if (mb >= 1024) {
+                    gb = mb / 1024
+                    printf "%.2f GB", gb
+                  } else {
+                    printf "%.2f MB", mb
+                  }
+                }')
+                echo "  • $file: $size_info"
+              else
+                echo "  • $file: Unable to determine size"
+              fi
+            fi
+          done
+          
+          total_size=$(find . -name "*.zip" -type f -exec stat -c %s {} + 2>/dev/null | awk '{sum += $1} END {print sum}')
+          if [ -n "$total_size" ] && [ "$total_size" -gt 0 ]; then
+            total_info=$(awk -v size="$total_size" 'BEGIN {
+              mb = size / 1048576
+              if (mb >= 1024) {
+                gb = mb / 1024
+                printf "%.2f GB", gb
+              } else {
+                printf "%.2f MB", mb
+              }
+            }')
+            echo "===================="
+            echo "Total: $total_info"
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.determine-tag.outputs.tag_name }}
+          files: |
+            release/*
+          generate_release_notes: true
+          prerelease: ${{ github.ref_type != 'tag' }}
