@@ -1211,7 +1211,8 @@ jobs:
           Write-Host "Contents of C:\openvino:"
           Get-ChildItem C:\openvino | Format-Table -AutoSize
           
-          if (Test-Path "C:\openvino\runtime") {
+          $runtimeCheck = "C:\openvino\runtime"
+          if (Test-Path $runtimeCheck) {
             Write-Host "✓ Runtime directory found"
           } else {
             Write-Host "✗ Warning: Runtime directory not found"
