@@ -1223,56 +1223,71 @@ jobs:
           # Copy OpenVINO runtime DLLs from Python package installation
           $copiedDlls = 0
           
-          if ($env:OPENVINO_RUNTIME_PATH -and (Test-Path $env:OPENVINO_RUNTIME_PATH)) {
-            Write-Host "Copying OpenVINO DLLs from Python package: $env:OPENVINO_RUNTIME_PATH"
+          if ($env:OPENVINO_INSTALL_PATH -and (Test-Path $env:OPENVINO_INSTALL_PATH)) {
+            Write-Host "OpenVINO install path: $env:OPENVINO_INSTALL_PATH"
             
-            # Try standard paths first: runtime/bin/intel64/Release
-            $binPath = Join-Path $env:OPENVINO_RUNTIME_PATH "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
-            if (Test-Path $binPath) {
-              Write-Host "Copying runtime DLLs from: $binPath"
-              $runtimeDlls = Get-ChildItem "$binPath\*.dll" -ErrorAction SilentlyContinue
-              if ($runtimeDlls) {
-                $runtimeDlls | Copy-Item -Destination dist\
-                $copiedDlls += $runtimeDlls.Count
-                Write-Host "Copied $($runtimeDlls.Count) runtime DLL(s)"
+            # For pip-installed OpenVINO, DLLs are in the 'libs' folder directly
+            # This is where openvino.lib and openvino.dll are stored
+            $libsPath = Join-Path $env:OPENVINO_INSTALL_PATH "libs"
+            if (Test-Path $libsPath) {
+              Write-Host "Copying OpenVINO DLLs from: $libsPath"
+              $libsDlls = Get-ChildItem "$libsPath\*.dll" -ErrorAction SilentlyContinue
+              if ($libsDlls) {
+                $libsDlls | Copy-Item -Destination dist\
+                $copiedDlls += $libsDlls.Count
+                Write-Host "Copied $($libsDlls.Count) DLL(s) from libs folder"
               }
             } else {
-              # Fallback: Try runtime/bin directly (some pip installations may use simpler structure)
-              $altBinPath = Join-Path $env:OPENVINO_RUNTIME_PATH "bin"
-              if (Test-Path $altBinPath) {
-                Write-Host "Copying runtime DLLs from alternate path: $altBinPath"
-                $runtimeDlls = Get-ChildItem "$altBinPath\*.dll" -ErrorAction SilentlyContinue
+              Write-Host "Warning: libs folder not found at $libsPath"
+            }
+            
+            # Define paths for runtime DLLs (used both for copying and for warning messages)
+            $binPath = $null
+            $tbbPath = $null
+            
+            # Also check for runtime DLLs in alternative locations
+            if ($env:OPENVINO_RUNTIME_PATH -and (Test-Path $env:OPENVINO_RUNTIME_PATH)) {
+              # Try standard paths: runtime/bin/intel64/Release
+              $binPath = Join-Path $env:OPENVINO_RUNTIME_PATH "bin" | Join-Path -ChildPath "intel64" | Join-Path -ChildPath "Release"
+              if (Test-Path $binPath) {
+                Write-Host "Copying runtime DLLs from: $binPath"
+                $runtimeDlls = Get-ChildItem "$binPath\*.dll" -ErrorAction SilentlyContinue
                 if ($runtimeDlls) {
                   $runtimeDlls | Copy-Item -Destination dist\
                   $copiedDlls += $runtimeDlls.Count
                   Write-Host "Copied $($runtimeDlls.Count) runtime DLL(s)"
                 }
               }
-            }
-            
-            # Copy TBB DLLs from runtime/3rdparty/tbb/bin
-            $tbbPath = Join-Path $env:OPENVINO_RUNTIME_PATH "3rdparty" | Join-Path -ChildPath "tbb" | Join-Path -ChildPath "bin"
-            if (Test-Path $tbbPath) {
-              Write-Host "Copying TBB DLLs from: $tbbPath"
-              $tbbDlls = Get-ChildItem "$tbbPath\*.dll" -ErrorAction SilentlyContinue
-              if ($tbbDlls) {
-                $tbbDlls | Copy-Item -Destination dist\
-                $copiedDlls += $tbbDlls.Count
-                Write-Host "Copied $($tbbDlls.Count) TBB DLL(s)"
+              
+              # Copy TBB DLLs from runtime/3rdparty/tbb/bin
+              $tbbPath = Join-Path $env:OPENVINO_RUNTIME_PATH "3rdparty" | Join-Path -ChildPath "tbb" | Join-Path -ChildPath "bin"
+              if (Test-Path $tbbPath) {
+                Write-Host "Copying TBB DLLs from: $tbbPath"
+                $tbbDlls = Get-ChildItem "$tbbPath\*.dll" -ErrorAction SilentlyContinue
+                if ($tbbDlls) {
+                  $tbbDlls | Copy-Item -Destination dist\
+                  $copiedDlls += $tbbDlls.Count
+                  Write-Host "Copied $($tbbDlls.Count) TBB DLL(s)"
+                }
               }
             }
             
             if ($copiedDlls -eq 0) {
               Write-Host "Warning: No OpenVINO DLLs found in expected locations"
               Write-Host "Searched paths:"
-              Write-Host "  - $binPath"
-              Write-Host "  - $tbbPath"
+              Write-Host "  - $libsPath"
+              if ($binPath) {
+                Write-Host "  - $binPath"
+              }
+              if ($tbbPath) {
+                Write-Host "  - $tbbPath"
+              }
             } else {
               Write-Host "Successfully copied $copiedDlls OpenVINO-related DLL(s)"
             }
           } else {
-            Write-Host "Error: OPENVINO_RUNTIME_PATH not set or path does not exist"
-            Write-Host "Expected path format: <Python site-packages>/openvino/runtime"
+            Write-Host "Error: OPENVINO_INSTALL_PATH not set or path does not exist"
+            Write-Host "Expected path format: <Python site-packages>/openvino"
             Write-Host "This may cause runtime errors when executing the binaries"
             Write-Host "Verify that OpenVINO was installed correctly via pip in the previous step"
           }
