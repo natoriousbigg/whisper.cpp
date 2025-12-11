@@ -149,14 +149,13 @@ jobs:
           set "PATH=%VULKAN_SDK%\Bin;%PATH%"
           cmake --build build --config Release -- -v
 
-      - name: Package whisper-cli and whisper-bench
+      - name: Package whisper-cli
         if: ${{ inputs.upload_artifacts }}
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           
           Copy-Item build\bin\whisper-cli.exe dist\
-          Copy-Item build\bin\whisper-bench.exe dist\
           
           if (Test-Path "build\bin\*.dll") {
             Copy-Item build\bin\*.dll dist\

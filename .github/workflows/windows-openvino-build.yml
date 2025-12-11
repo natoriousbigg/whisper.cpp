@@ -112,14 +112,13 @@ jobs:
           call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
           cmake --build build --config Release -- -v
 
-      - name: Package whisper-cli and whisper-bench
+      - name: Package whisper-cli
         if: ${{ inputs.upload_artifacts }}
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           
           Copy-Item build\bin\whisper-cli.exe dist\
-          Copy-Item build\bin\whisper-bench.exe dist\
           
           if (Test-Path "build\bin\*.dll") {
             Copy-Item build\bin\*.dll dist\
