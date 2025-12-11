@@ -44,11 +44,11 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package whisper-cli and whisper-bench
+      - name: Package whisper-cli
         if: ${{ inputs.upload_artifacts }}
         run: |
           mkdir -p dist
-          cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
+          cp build/bin/Release/whisper-cli dist/
 
       - name: Upload artifacts
         if: ${{ inputs.upload_artifacts }}
@@ -88,11 +88,11 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
           cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package whisper-cli and whisper-bench
+      - name: Package whisper-cli
         if: ${{ inputs.upload_artifacts }}
         run: |
           mkdir -p dist
-          cp build/bin/Release/whisper-cli build/bin/Release/whisper-bench dist/
+          cp build/bin/Release/whisper-cli dist/
 
       - name: Upload artifacts
         if: ${{ inputs.upload_artifacts }}

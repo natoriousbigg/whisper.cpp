@@ -60,11 +60,11 @@ jobs:
       - name: Build
         run: cmake --build build --config Release -j $(nproc)
 
-      - name: Package whisper-cli and whisper-bench
+      - name: Package whisper-cli
         if: ${{ inputs.upload_artifacts }}
         run: |
           mkdir -p dist
-          cp build/bin/whisper-cli build/bin/whisper-bench dist/
+          cp build/bin/whisper-cli dist/
 
       - name: Upload artifacts
         if: ${{ inputs.upload_artifacts }}
